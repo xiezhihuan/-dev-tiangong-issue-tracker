@@ -1,0 +1,41 @@
+{
+  "name": "tiangong-issue-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "软件用户反馈收集系统：通过 QQ 机器人随手记录微信里的反馈，自动归类、OCR、查同类",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "check-node": "node --import tsx src/node-version.ts",
+    "start": "node --disable-warning=ExperimentalWarning dist/main.js",
+    "dev": "node --disable-warning=ExperimentalWarning --import tsx --watch src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "pretest": "npm run -s check-node",
+    "test": "node --disable-warning=ExperimentalWarning --import tsx --test test/*.test.ts",
+    "test:e2e": "node --disable-warning=ExperimentalWarning --import tsx test/e2e.ts",
+    "doctor": "node --disable-warning=ExperimentalWarning --import tsx src/doctor.ts",
+    "demo": "node --disable-warning=ExperimentalWarning --import tsx scripts/demo.ts"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.1.5",
+    "@fastify/multipart": "^10.1.9",
+    "@fastify/static": "^10.1.12",
+    "fastify": "^5.12.8",
+    "ws": "^8.23.0"
+  },
+  "optionalDependencies": {
+    "@napi-rs/canvas": "^1.2.0",
+    "onnxruntime-node": "^1.31.1",
+    "ppu-paddle-ocr": "^6.7.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/ws": "^8.18.2",
+    "playwright-core": "^1.65.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

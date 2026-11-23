@@ -1,6 +1,6 @@
 /* 与网页端同一套蓝色；间距 4 的倍数，圆角 8（控件）/ 12（卡片） */
-:root{color-scheme:light dark;--bg:#f4f5f7;--panel:#fff;--panel2:#f7f8fa;--line:#e6e8ec;--line2:#d3d6dc;--text:#1b1d21;--text2:#5b6069;--muted:#737983;--brand:#256abf;--brand-h:#1f5aa4;--brand-s:#eaf2fc;--ring:#256abf38;--on:#fff;--green:#0a7a3c;--green-s:#e6f6ec;--orange:#a25a00;--orange-s:#fff2df;--red:#b92f2f;--red-s:#fdecec;--nav:#eceef2;--nav-on:#fff;--shadow:0 1px 2px #1018280a,0 2px 8px #1018280d}
-@media(prefers-color-scheme:dark){:root{--bg:#16181b;--panel:#1f2226;--panel2:#262a2f;--line:#2f3339;--line2:#42474f;--text:#e9ebee;--text2:#b4bac3;--muted:#949aa4;--brand:#5598e7;--brand-h:#6ba7ee;--brand-s:#1b2c44;--ring:#5598e74d;--on:#0b0b0b;--green:#3fc47a;--green-s:#15301f;--orange:#f0a94a;--orange-s:#36270f;--red:#f08080;--red-s:#3a1d1d;--nav:#1b1e22;--nav-on:#2b2f35;--shadow:0 1px 2px #0005}}
+:root{color-scheme:light dark;--bg:#f4f5f7;--panel:#fff;--panel2:#f7f8fa;--line:#e6e8ec;--line2:#d3d6dc;--text:#1b1d21;--text2:#5b6069;--muted:#737983;--brand:#256abf;--brand-h:#1f5aa4;--brand-s:#eaf2fc;--ring:#256abf38;--on:#fff;--green:#0a7a3c;--green-s:#e6f6ec;--orange:#a25a00;--orange-s:#fff2df;--red:#b92f2f;--red-s:#fdecec;--nav:#fbfbfd;--nav-on:#fff;--shadow:0 1px 2px #1018280a,0 2px 8px #1018280d}
+@media(prefers-color-scheme:dark){:root{--bg:#16181b;--panel:#1f2226;--panel2:#262a2f;--line:#2f3339;--line2:#42474f;--text:#e9ebee;--text2:#b4bac3;--muted:#949aa4;--brand:#5598e7;--brand-h:#6ba7ee;--brand-s:#1b2c44;--ring:#5598e74d;--on:#0b0b0b;--green:#3fc47a;--green-s:#15301f;--orange:#f0a94a;--orange-s:#36270f;--red:#f08080;--red-s:#3a1d1d;--nav:#1a1d20;--nav-on:#2b2f35;--shadow:0 1px 2px #0005}}
 *{box-sizing:border-box}[hidden]{display:none!important}.sprite{position:absolute}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.55 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei UI","Microsoft YaHei",sans-serif;-webkit-font-smoothing:antialiased;user-select:none}
 svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
@@ -41,3 +41,14 @@ dialog{border:0;border-radius:14px;background:var(--panel);color:var(--text);pad
 #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:8px 16px;border-radius:9px;z-index:9;max-width:80vw}
 @media(max-width:900px){.main{padding:0 22px 30px}.dragbar{margin:0 -22px}}
 .win .nav{padding-top:20px}.win .drag{-webkit-app-region:no-drag}
+/* 与问题库同一套质感：渐变标志、彩色图标块、描边卡片 */
+.brand-logo,.cover-logo{background:linear-gradient(160deg,#4a97f0,#1f5aa4);box-shadow:0 4px 12px #256abf40,inset 0 1px 0 #ffffff40}.brand-logo{width:32px;height:32px;border-radius:9px}.brand-logo svg{width:18px;height:18px}
+.nav{background:var(--nav)}.nav-item.on{background:var(--brand-s);color:var(--brand);font-weight:600;box-shadow:none}.nav-item:not(.on):hover{background:color-mix(in srgb,var(--text) 5%,transparent)}.nav .btn.primary{height:38px;box-shadow:0 2px 8px #256abf33}
+.card,.panel,.nums button,.features>div{border:1px solid var(--line)}
+.card h2{font-size:15px;margin-bottom:12px}.card h2>svg{box-sizing:border-box;width:28px;height:28px;padding:6px;border-radius:8px;background:var(--brand-s);color:var(--brand)}#phoneCard h2>svg{background:var(--green-s);color:var(--green)}#webCard h2>svg{background:var(--orange-s);color:var(--orange)}
+.nums button{display:flex;align-items:center;gap:14px;padding:15px 18px;background:linear-gradient(135deg,var(--tone-s),var(--panel) 62%);transition:transform .14s,box-shadow .14s}.nums button:hover:not(:disabled){background:linear-gradient(135deg,var(--tone-s),var(--panel) 62%);transform:translateY(-1px);box-shadow:0 2px 4px #1018280d,0 8px 24px #10182817}.nums b{line-height:1.15}.nums .ic{width:42px;height:42px;background:color-mix(in srgb,var(--tone) 13%,transparent);color:var(--tone)}.nums .ic svg{width:21px;height:21px}
+.tone-blue{--tone:var(--brand);--tone-s:var(--brand-s)}.tone-orange{--tone:var(--orange);--tone-s:var(--orange-s)}.tone-green{--tone:var(--green);--tone-s:var(--green-s)}
+.dot.ok{box-shadow:0 0 0 5px #16a34a26}.dot.warn{box-shadow:0 0 0 5px #f08c1b26}.dot.bad{box-shadow:0 0 0 5px #e5484d26}.hero{padding-left:26px;gap:20px}
+.url{background:var(--panel2);border-radius:8px;padding:1px 1px 1px 8px;font-size:12px;gap:0;width:fit-content;margin:0 auto 6px;max-width:100%}#phoneCard .qr{border:1px solid var(--line);padding:6px}
+.page-head p{margin-top:2px}.item b{font-weight:600}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}

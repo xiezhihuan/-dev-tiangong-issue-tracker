@@ -171,6 +171,7 @@ export async function createServer({ config, store, media, bot, startedAt }: Web
 
   // ───── 统计 / 导出 ─────
   app.get('/api/stats', async (req) => store.stats(filter(req)));
+  app.get('/api/summary', async () => ({ ...store.summary(), bot: bot?.gateway.state ?? 'disabled' }));
   app.get('/api/export/:fmt', async (req, reply) => {
     const fmt = (req.params as any).fmt as string, f = filter(req), name = `feedback-${fmtTime(Date.now()).slice(0, 10)}.${fmt}`;
     reply.header('Content-Disposition', `attachment; filename="${name}"`);

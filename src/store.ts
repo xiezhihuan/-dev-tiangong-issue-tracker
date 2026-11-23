@@ -401,6 +401,16 @@ export class Store {
 
   // ───────── 统计 ─────────
 
+  /** 界面侧栏和概览卡片用的数字；不受筛选影响。 */
+  summary(): Row {
+    const d = new Date(this.now()), ago = (n: number): number => new Date(d.getFullYear(), d.getMonth(), d.getDate() - n).getTime();
+    const row = this.db.get(`SELECT COALESCE(SUM(status='open'),0) open, COALESCE(SUM(status='doing'),0) doing, COALESCE(SUM(status='resolved'),0) resolved, COUNT(*) total,
+      COALESCE(SUM(severity='urgent' AND status IN ('open','doing')),0) urgent, COALESCE(SUM(topic_id IS NULL),0) ungrouped,
+      COALESCE(SUM(created_at>=?),0) today, COALESCE(SUM(created_at>=?),0) week, COALESCE(SUM(created_at>=? AND created_at<?),0) prevWeek FROM feedbacks WHERE deleted_at IS NULL`, ago(0), ago(6), ago(13), ago(6))!;
+    const rows = this.db.all(`SELECT strftime('%Y-%m-%d', created_at/1000, 'unixepoch', 'localtime') name, COUNT(*) count FROM feedbacks WHERE deleted_at IS NULL AND created_at>=? GROUP BY 1`, ago(13));
+    const days = Array.from({ length: 14 }, (_, i) => { const x = new Date(ago(13 - i)), name = `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; return { name, count: rows.find((r) => r.name === name)?.count ?? 0 }; });
+    return { ...row, days, trash: this.db.get('SELECT COUNT(*) n FROM feedbacks WHERE deleted_at IS NOT NULL')!.n };
+  }
   stats(f: Filter): Row {
     const w = this.where(f);
     const group = (col: string) => this.db.all(`SELECT ${col} name, COUNT(*) count, SUM(f.status IN ('open','doing')) todo FROM feedbacks f WHERE ${w.sql} GROUP BY ${col} ORDER BY count DESC`, ...w.args);

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, Notification, Tray, clipboard, dialog, ipcMain, nativeImage, powerMonitor, powerSaveBlocker, safeStorage, session, shell } = require('electron');
+const { app, BrowserWindow, Menu, Notification, Tray, clipboard, dialog, ipcMain, nativeImage, nativeTheme, powerMonitor, powerSaveBlocker, safeStorage, session, shell } = require('electron');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -37,7 +37,7 @@ function applySystem() {
 function openPanel(view) {
   if (quitting) return;
   if (!panel || panel.isDestroyed()) {
-    panel = new BrowserWindow({ width: 1000, height: 740, minWidth: 820, minHeight: 600, title: NAME, ...(MAC ? { titleBarStyle: 'hiddenInset' } : { icon: asset('icon.ico'), autoHideMenuBar: true }), show: false, backgroundColor: '#f4f5f7', webPreferences: { preload: path.join(__dirname, 'preload-settings.cjs'), contextIsolation: true, sandbox: true } });
+    panel = new BrowserWindow({ width: 1000, height: 740, minWidth: 820, minHeight: 600, title: NAME, ...(MAC ? { titleBarStyle: 'hiddenInset' } : { icon: asset('icon.ico'), autoHideMenuBar: true }), show: false, backgroundColor: nativeTheme.shouldUseDarkColors ? '#16181b' : '#f4f5f7', webPreferences: { preload: path.join(__dirname, 'preload-settings.cjs'), contextIsolation: true, sandbox: true } });
     panel.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     panel.webContents.on('will-navigate', (e) => e.preventDefault());
     panel.loadURL(UI);
@@ -67,7 +67,7 @@ async function openMain(hash = '') {
   try { await signIn(origin); } catch (e) { console.error(e); } // 失败时页面自己会显示登录框
   if (quitting) return;
   if (!main || main.isDestroyed()) {
-    main = new BrowserWindow({ width: 1240, height: 820, minWidth: 400, minHeight: 500, title: NAME, ...(MAC ? {} : { icon: asset('icon.ico'), autoHideMenuBar: true }), show: false, webPreferences: { preload: path.join(__dirname, 'preload-main.cjs'), partition: 'persist:main', contextIsolation: true, sandbox: true } });
+    main = new BrowserWindow({ width: 1240, height: 820, minWidth: 400, minHeight: 500, title: NAME, ...(MAC ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 18 } } : { icon: asset('icon.ico'), autoHideMenuBar: true }), show: false, backgroundColor: nativeTheme.shouldUseDarkColors ? '#16181b' : '#f4f5f7', webPreferences: { preload: path.join(__dirname, 'preload-main.cjs'), partition: 'persist:main', contextIsolation: true, sandbox: true } });
     const wc = main.webContents;
     const local = (u) => { try { return new URL(u).origin === service.snap?.url; } catch { return false; } };
     wc.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url) && !local(url)) shell.openExternal(url); return { action: 'deny' }; });

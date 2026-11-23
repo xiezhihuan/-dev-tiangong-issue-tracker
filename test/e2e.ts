@@ -92,6 +92,10 @@ try {
   await p.reload();
   await p.getByText('共 3 条').waitFor();
   await p.screenshot({ path: path.join(OUT, '1-列表.png') });
+  await p.locator('.kpi', { hasText: '已解决' }).click(); await p.getByText('共 1 条').waitFor(); await p.locator('.kpi.on', { hasText: '已解决' }).click(); await p.getByText('共 3 条').waitFor();
+  await p.locator('.views a', { hasText: '未归并' }).click(); await p.getByText('共 1 条').waitFor(); await p.locator('.views a', { hasText: '回收站' }).click(); await p.getByText('没有符合条件的反馈').waitFor();
+  await p.getByRole('link', { name: '清除条件' }).click(); await p.getByText('共 3 条').waitFor();
+  ok('概览卡片、快捷视图筛选');
   await p.getByLabel('搜索').fill('2031'); await p.getByLabel('搜索').press('Enter');
   await p.getByText('共 1 条').waitFor();
   ok('按截图里的文字搜索到反馈');
@@ -106,6 +110,16 @@ try {
   await p.getByPlaceholder('追加内容或备注').fill('已回访客户'); await p.getByLabel('仅作内部备注').check(); await p.getByRole('button', { name: '追加' }).click();
   await p.locator('.msg.note', { hasText: '已回访客户' }).waitFor();
   ok('详情：图片显示、改字段、加备注');
+
+  const seg = p.getByRole('group', { name: '状态' });
+  await seg.getByRole('button', { name: '处理中' }).click(); await until(() => app!.store.require(1).status === 'doing');
+  await p.locator('.seg .doing.on').waitFor();
+  await seg.getByRole('button', { name: '已解决' }).click(); await until(() => app!.store.require(1).status === 'resolved');
+  await p.getByRole('button', { name: '删除' }).click(); await p.locator('dialog.ask').getByRole('button', { name: '取消' }).click();
+  await p.locator('dialog').waitFor({ state: 'detached' }); assert.equal(app.store.require(1).deleted_at, null);
+  await p.getByRole('button', { name: '移动/拆分' }).first().click(); await p.locator('dialog.ask input').fill('abc'); await p.locator('dialog.ask input').press('Enter');
+  await p.locator('#toast.bad', { hasText: '编号无效' }).waitFor();
+  ok('状态一键切换；应用内确认框、输入框可取消、校验报错');
 
   await p.getByRole('button', { name: '新增反馈' }).click();
   const dlg = p.locator('dialog');
@@ -128,7 +142,7 @@ try {
   await p.locator('.bar').first().hover(); await p.locator('.bar .tip').first().waitFor();
   await p.screenshot({ path: path.join(OUT, '4-统计.png'), fullPage: true });
   await p.goto(app.url + '/#/settings'); await p.getByText('运行状态').waitFor();
-  await p.getByText('在线').waitFor();
+  await p.locator('main').getByText('在线').waitFor();
   await p.screenshot({ path: path.join(OUT, '5-设置.png'), fullPage: true });
   ok('统计、设置页');
 

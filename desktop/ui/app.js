@@ -62,7 +62,7 @@ function draw() {
   $('alert').hidden = !alert; $('alertText').textContent = alert;
   $('alertPort').hidden = $('alertFix').hidden = true;
   if (v.error?.code === 'port') { $('alertPort').hidden = false; tg.portFix(false).then((o) => { if (S.v.error?.code !== 'port' || !o) return; $('alertText').textContent = `端口 ${st.port} 被「${o.name}」占用（PID ${o.pid}）${o.old ? '，这是旧版服务' : ''}`; $('alertFix').hidden = !o.old; $('alertFix').textContent = '停止旧版并启动'; }); }
-  part('nums', s && [s.total, s.todo, s.today], () => [['全部问题', s?.total, '#/feedbacks'], ['待处理', s?.todo, '#/feedbacks?status=todo'], ['今天新增', s?.today, '#/feedbacks']].map(([k, n, h]) => el('button', { disabled: !s, onclick: () => tg.openMain(h).catch((e) => toast(e.message)) }, el('span', { class: 'sub' }, k), el('b', {}, n ?? '—'))));
+  part('nums', s && [s.total, s.todo, s.today], () => [['全部问题', s?.total, '#/feedbacks', 'list', 'blue'], ['待处理', s?.todo, '#/feedbacks?status=todo', 'clock', 'orange'], ['今天新增', s?.today, '#/feedbacks', 'spark', 'green']].map(([k, n, h, ic, tone]) => el('button', { class: `tone-${tone}`, disabled: !s, onclick: () => tg.openMain(h).catch((e) => toast(e.message)) }, el('span', { class: 'ic' }, icon(ic)), el('span', {}, el('b', {}, n ?? '—'), el('span', { class: 'sub' }, k)))));
   part('phoneCard', [s?.access, st.scope], () => {
     const head = el('h2', {}, icon('phone'), '手机查看');
     if (!s) return [head, el('div', { class: 'sub' }, '服务启动后显示')];

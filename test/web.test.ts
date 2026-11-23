@@ -63,6 +63,9 @@ test('同类问题、统计、导出、分类维护', async () => {
   assert.equal((await api(`/topics/${g.topicId}`, { method: 'PATCH', body: { solution: '装字体', status: 'resolved', cascade: true } })).data.feedbacks[0].status, 'resolved');
   const s = (await api('/stats')).data;
   assert.ok(s.total >= 4 && s.byCategory.some((c: any) => c.name === '打印' && c.count === 2));
+  const sum = (await api('/summary')).data;
+  assert.equal(sum.total, s.total); assert.equal(sum.open + sum.doing, s.todo); assert.equal(sum.resolved, s.resolved);
+  assert.equal(sum.days.length, 14); assert.equal(sum.days.at(-1).count, sum.today); assert.equal(sum.today, s.total);
   assert.match((await api('/export/csv')).data, /打印页眉错位/);
   assert.ok(Array.isArray((await api(`/export/json?topic=${g.topicId}`)).data));
   assert.equal((await api('/taxonomy/product', { method: 'POST', body: { name: 'PC端', keywords: '电脑' } })).status, 200);

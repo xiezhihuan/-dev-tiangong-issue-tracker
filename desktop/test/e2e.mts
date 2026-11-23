@@ -115,6 +115,11 @@ try {
   const rpc = await fetch(`http://127.0.0.1:${port}/mcp`, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: `Bearer ${token}` }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'search_issues', arguments: { query: '转圈' } } }) });
   assert.match(await rpc.text(), /导出报表一直转圈/);
   ok('生成 MCP 令牌并查到问题');
+  await m.evaluate(() => { location.hash = '#/settings'; }); await m.getByLabel('单问题编号').fill('1'); await m.getByRole('button', { name: '签发单问题码' }).click();
+  const authCode = await m.locator('#mcp-auth-out code').innerText(); assert.match(authCode, /^tga_/); assert.match(await m.locator('#mcp-auth-out').innerText(), /问题 #1/);
+  const writeRpc = await fetch(`http://127.0.0.1:${port}/mcp`, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: `Bearer ${token}` }, body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'update_issue', arguments: { id: 1, authorization_code: authCode, resolution: '包内 MCP 写入测试' } } }) });
+  assert.match(await writeRpc.text(), /\\"ok\\": true/);
+  ok('包内 MCP 通过真实 HTTP 协议完成单问题受控写入');
   await p.locator('#stepper').getByRole('button', { name: '访问' }).click();
   await p.locator('#publicBox summary').click(); await p.locator('#publicUrl').fill(`http://127.0.0.1:${port}`); await p.getByRole('button', { name: '测试', exact: true }).click(); await p.getByText('可以访问').waitFor();
   await p.locator('#publicUrl').fill('https://fb.example.com/x'); await p.getByRole('button', { name: '保存并重启服务' }).click(); await p.getByText('不要带路径').waitFor();

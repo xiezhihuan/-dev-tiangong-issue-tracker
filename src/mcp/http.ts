@@ -5,6 +5,7 @@ import type { Row } from '../db.js';
 import { logger } from '../log.js';
 import type { Media } from '../media.js';
 import { UserError, type Store } from '../store.js';
+import { Authorizations, type McpIdentity } from './auth.js';
 import { createMcpServer } from './tools.js';
 
 const log = logger('mcp');
@@ -21,18 +22,18 @@ export class Tokens {
     return { id: this.store.db.run('INSERT INTO api_tokens(name,hash,created_at) VALUES(?,?,?)', n, hash(token), Date.now()).id, token };
   }
   remove(id: number): void { this.store.db.run('DELETE FROM api_tokens WHERE id=?', id); }
-  verify(header: string | undefined): boolean {
+  verify(header: string | undefined): McpIdentity | null {
     const t = /^Bearer\s+(\S+)$/i.exec(header ?? '')?.[1];
-    if (!t) return false;
-    const r = this.store.db.get('SELECT id,last_used_at FROM api_tokens WHERE hash=?', hash(t));
-    if (!r) return false;
+    if (!t) return null;
+    const r = this.store.db.get('SELECT id,name,last_used_at FROM api_tokens WHERE hash=?', hash(t));
+    if (!r) return null;
     if (Date.now() - (r.last_used_at ?? 0) > 60_000) this.store.db.run('UPDATE api_tokens SET last_used_at=? WHERE id=?', Date.now(), r.id);
-    return true;
+    return { id: r.id, name: r.name, permission: 1 };
   }
 }
 
 /** MCP Streamable HTTP，无会话：每个请求独立，服务重启对客户端无感。 */
-export function registerMcp(app: FastifyInstance, deps: { store: Store; media: Media; tokens: Tokens }): void {
+export function registerMcp(app: FastifyInstance, deps: { store: Store; media: Media; tokens: Tokens; authorizations: Authorizations }): void {
   const rpcError = (message: string) => ({ jsonrpc: '2.0', error: { code: -32000, message }, id: null });
   const crossSite = (req: FastifyRequest) => {
     const o = req.headers.origin;
@@ -44,11 +45,13 @@ export function registerMcp(app: FastifyInstance, deps: { store: Store; media: M
     onRequest: async (req, reply) => {
       reply.header('Cache-Control', 'no-store');
       if (crossSite(req)) return reply.code(403).send(rpcError('非法请求来源')); // 防 DNS 重绑定
-      if (!deps.tokens.verify(req.headers.authorization)) return reply.code(401).header('WWW-Authenticate', 'Bearer').send(rpcError('访问令牌无效，请到网页「设置 → AI 助手」生成'));
+      const identity = deps.tokens.verify(req.headers.authorization);
+      if (!identity) return reply.code(401).header('WWW-Authenticate', 'Bearer').send(rpcError('访问令牌无效，请到网页「设置 → AI 助手」生成'));
+      (req as any).mcpIdentity = identity;
       if (req.method !== 'POST') return reply.code(405).header('Allow', 'POST').send(rpcError('仅支持 POST'));
     },
     handler: async (req, reply) => {
-      const server = createMcpServer(deps);
+      const server = createMcpServer({ ...deps, identity: (req as any).mcpIdentity });
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
       reply.raw.on('close', () => { void transport.close(); void server.close(); });
       reply.hijack();

@@ -364,9 +364,24 @@ function mcpCard(s) {
       block('其他支持 MCP 的工具（JSON）', JSON.stringify({ mcpServers: { 'tiangong-feedback': { type: 'http', url, headers: { Authorization: `Bearer ${token}` } } } }, null, 2)));
   });
   out.id = 'mcp-out';
-  return h('div', { class: 'card' }, h2('ai', 'AI 助手（MCP）', 'orange'), h('div', { class: 'small muted' }, `让 Claude Code、Codex 等查询问题库，只读。地址 ${url}`),
+  const issueNo = h('input', { inputmode: 'numeric', placeholder: '问题编号，如 12', 'aria-label': '单问题编号' });
+  const authOut = h('div', {}); authOut.id = 'mcp-auth-out';
+  const authBlock = (scope) => act(async () => {
+    const body = scope === 'issue' ? { scope, issue_id: Number(issueNo.value) } : { scope };
+    const r = await api('/mcp-authorizations', { method: 'POST', body });
+    await render();
+    document.getElementById('mcp-auth-out')?.replaceChildren(h('div', { class: 'sev-high', style: 'margin-top:10px' }, '授权码只显示这一次，请立即复制并交给 MCP：'),
+      h('div', { class: 'row sim' }, h('code', { class: 'grow' }, r.code), h('button', { class: 'link', onclick: () => copy(r.code) }, '复制')),
+      h('div', { class: 'small muted' }, `作用范围：${r.authorization.scope === 'all' ? '全部问题及同类问题' : `问题 #${r.authorization.issueId}`} · 到期：${time(r.authorization.expiresAt)}`));
+  });
+  const authRows = (s.authorizations ?? []).map((a) => h('div', { class: 'row sim' }, tile(a.scope === 'all' ? 'layers' : 'key', a.active ? 'green' : 'slate', 'sm'), h('span', { class: 'grow' }, a.scope === 'all' ? '全部问题及同类问题' : `问题 #${a.issue_id}`, h('div', { class: 'muted small' }, `授权人 ${a.issuer} · 到期 ${time(a.expires_at)}${a.active ? '' : ' · 已失效'}`)), a.active && h('button', { class: 'link danger', onclick: act(async () => { await api(`/mcp-authorizations/${a.id}`, { method: 'DELETE' }); await render(); }) }, '撤销')));
+  const auditRows = (s.mcpAudit ?? []).slice(0, 20).map((a) => h('div', { class: 'small sim' }, h('span', { class: a.success ? 'sev-resolved' : 'sev-urgent' }, a.success ? '成功' : '拒绝'), ` ${time(a.at)} · ${a.operation} · ${a.issue_id ? `问题 #${a.issue_id}` : a.topic_id ? `同类问题 #${a.topic_id}` : '—'} · 授权人 ${a.issuer || '未知'} · MCP ${a.token_name || '未知'}`));
+  return h('div', { class: 'card' }, h2('ai', 'AI 助手（MCP）', 'orange'), h('div', { class: 'small muted' }, `让 Claude Code、Codex 等查询问题库；写入必须使用这里签发的短期授权码。地址 ${url}`),
     s.tokens.map((t) => h('div', { class: 'row sim' }, tile('key', 'slate', 'sm'), h('span', { class: 'grow' }, t.name, h('span', { class: 'muted small' }, ` 创建于 ${time(t.created_at)} · ${t.last_used_at ? `最近使用 ${time(t.last_used_at)}` : '未使用过'}`)), h('button', { class: 'link danger', onclick: act(async () => { if (!(await ask({ title: `撤销「${t.name}」？`, text: '使用它的助手将立即无法访问。', ok: '撤销', danger: true }))) return; await api(`/mcp-tokens/${t.id}`, { method: 'DELETE' }); render(); }) }, '撤销'))),
-    h('div', { class: 'row', style: 'margin-top:12px' }, name, ib('key', '生成访问令牌', { onclick: create })), out);
+    h('div', { class: 'row', style: 'margin-top:12px' }, name, ib('key', '生成访问令牌', { onclick: create })), out,
+    h('div', { class: 'subcard', style: 'margin-top:16px' }, h('b', {}, '临时写入授权'), h('div', { class: 'small muted', style: 'margin:6px 0 10px' }, '授权码最长 15 分钟。单问题码只允许修改指定问题，全部问题码还可修改同类问题。服务端会记录真实授权人和 MCP 来源。'),
+      h('div', { class: 'row' }, issueNo, ib('key', '签发单问题码', { onclick: authBlock('issue') }), ib('layers', '签发全部问题码', { onclick: authBlock('all') })), authOut, authRows,
+      auditRows.length > 0 && h('details', { class: 'log', style: 'margin-top:12px' }, h('summary', {}, icon('history'), 'MCP 写入审计'), auditRows)));
 }
 async function settingsPage() {
   const s = await api('/system');

@@ -69,6 +69,39 @@ const MIGRATIONS: string[] = [
   -- MCP 访问令牌，只存哈希
   CREATE TABLE api_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, hash TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL, last_used_at INTEGER);
   `,
+  `
+  -- MCP 临时写入授权，只存哈希；范围为单问题或全部问题
+  CREATE TABLE IF NOT EXISTS mcp_authorizations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    hash TEXT NOT NULL UNIQUE,
+    scope TEXT NOT NULL CHECK (scope IN ('issue','all')),
+    issue_id INTEGER REFERENCES feedbacks(id) ON DELETE CASCADE,
+    issuer TEXT NOT NULL,
+    issuer_permission INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    revoked_at INTEGER,
+    CHECK ((scope='issue' AND issue_id IS NOT NULL) OR (scope='all' AND issue_id IS NULL))
+  );
+  CREATE INDEX IF NOT EXISTS mcp_authorizations_active ON mcp_authorizations(expires_at,revoked_at);
+
+  -- MCP 写入审计；凭据只以关联 ID 出现，不写入授权码
+  CREATE TABLE IF NOT EXISTS mcp_audit (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    at INTEGER NOT NULL,
+    authorization_id INTEGER REFERENCES mcp_authorizations(id) ON DELETE SET NULL,
+    token_id INTEGER REFERENCES api_tokens(id) ON DELETE SET NULL,
+    token_name TEXT NOT NULL DEFAULT '',
+    issuer TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL DEFAULT 'MCP',
+    operation TEXT NOT NULL,
+    issue_id INTEGER,
+    topic_id INTEGER,
+    success INTEGER NOT NULL CHECK (success IN (0,1)),
+    detail TEXT NOT NULL DEFAULT ''
+  );
+  CREATE INDEX IF NOT EXISTS mcp_audit_at ON mcp_audit(at);
+  `,
 ];
 
 export class Db {

@@ -92,7 +92,7 @@
               <div class="field"><label for="publicUrl">外网地址</label><div class="inrow"><input id="publicUrl" name="publicUrl" placeholder="https://fb.example.com"><button type="button" class="btn" id="testPublic">测试</button></div><div class="result" id="pubResult" hidden></div><span class="hint">穿透客户端装在这台电脑上即可。开放外网时，登录密码至少 12 位</span></div></details>
           </div>
           <div class="panel" data-step="ai">
-            <h3>AI 助手（MCP）</h3><p class="sub">让 Claude Code、Codex 等查询问题库。只读，不能修改</p>
+            <h3>AI 助手（MCP）</h3><p class="sub">让 Claude Code、Codex 等查询问题库。写入须在网页「设置 → AI 助手」签发短期授权码</p>
             <div id="tokens"></div>
             <div class="inrow"><input id="tokenName" placeholder="名称，如 我的 Claude" aria-label="令牌名称"><button type="button" class="btn" id="mkToken">生成访问令牌</button></div>
             <div id="tokenOut"></div>

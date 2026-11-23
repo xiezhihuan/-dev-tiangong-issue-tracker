@@ -44,11 +44,48 @@ test('MCP：令牌只存哈希，撤销后立即失效', async () => {
   assert.equal((await post({ authorization: `Bearer ${t.token}` })).status, 401);
   assert.equal((await api('/mcp-tokens', { method: 'POST', body: { name: '' } })).status, 400);
 });
-test('MCP：工具齐全且都声明只读', async () => {
+test('MCP：查询工具保持兼容，写入工具明确声明可写', async () => {
   const { tools } = await client.listTools();
-  assert.deepEqual(tools.map((t) => t.name).sort(), ['find_similar_issues', 'get_attachment', 'get_issue', 'get_overview', 'list_known_problems', 'search_issues']);
-  assert.ok(tools.every((t) => t.annotations?.readOnlyHint === true));
-  assert.match(client.getInstructions()!, /只读/);
+  assert.deepEqual(tools.map((t) => t.name).sort(), ['find_similar_issues', 'get_attachment', 'get_issue', 'get_overview', 'list_known_problems', 'search_issues', 'update_issue', 'update_known_problem']);
+  assert.ok(tools.filter((t) => ['update_issue', 'update_known_problem'].includes(t.name)).every((t) => t.annotations?.readOnlyHint === false));
+  assert.ok(tools.filter((t) => !['update_issue', 'update_known_problem'].includes(t.name)).every((t) => t.annotations?.readOnlyHint === true));
+  assert.match(client.getInstructions()!, /授权码/);
+});
+
+test('MCP：临时授权码限制范围、有效期与主题更新，且记录审计', async () => {
+  const a = await add({ text: '授权范围问题 A' }), b = await add({ text: '授权范围问题 B' });
+  const one = (await api('/mcp-authorizations', { method: 'POST', body: { scope: 'issue', issue_id: a } })).data;
+  assert.match(one.code, /^tga_/); assert.equal(one.authorization.issueId, a);
+  const ok = await call('update_issue', { id: a, authorization_code: one.code, resolution: 'MCP 已修复' });
+  assert.equal(ok.err, false); assert.equal((await api(`/feedbacks/${a}`)).data.resolution, 'MCP 已修复');
+  const before = (await api(`/feedbacks/${b}`)).data;
+  const cross = await call('update_issue', { id: b, authorization_code: one.code, status: 'resolved' });
+  assert.equal(cross.err, true); assert.deepEqual((await api(`/feedbacks/${b}`)).data.status, before.status);
+
+  const grouped = (await api(`/feedbacks/${a}/group`, { method: 'POST', body: { with: b } })).data;
+  const topicBefore = (await api(`/topics/${grouped.topicId}`)).data;
+  const topicDenied = await call('update_known_problem', { id: grouped.topicId, authorization_code: one.code, solution: '不应写入' });
+  assert.equal(topicDenied.err, true); assert.equal((await api(`/topics/${grouped.topicId}`)).data.solution, topicBefore.solution);
+
+  const all = (await api('/mcp-authorizations', { method: 'POST', body: { scope: 'all' } })).data;
+  assert.equal((await call('update_issue', { id: b, authorization_code: all.code, status: 'resolved' })).err, false);
+  assert.equal((await call('update_known_problem', { id: grouped.topicId, authorization_code: all.code, solution: '统一方案', cascade: true })).err, false);
+  assert.equal((await api(`/topics/${grouped.topicId}`)).data.solution, '统一方案');
+  assert.equal((await api(`/feedbacks/${b}`)).data.status, 'resolved');
+
+  for (const code of ['', 'tga_invalid']) assert.equal((await call('update_issue', { id: a, authorization_code: code, title: '不应写入' })).err, true);
+  const expired = (await api('/mcp-authorizations', { method: 'POST', body: { scope: 'issue', issue_id: a } })).data;
+  app.store.db.run('UPDATE mcp_authorizations SET expires_at=? WHERE id=?', Date.now() - 1, expired.authorization.id);
+  assert.equal((await call('update_issue', { id: a, authorization_code: expired.code, title: '过期不可写' })).err, true);
+  const elevated = (await api('/mcp-authorizations', { method: 'POST', body: { scope: 'issue', issue_id: a } })).data;
+  app.store.db.run('UPDATE mcp_authorizations SET issuer_permission=2 WHERE id=?', elevated.authorization.id);
+  assert.equal((await call('update_issue', { id: a, authorization_code: elevated.code, title: '权限不足不可写' })).err, true);
+  const audit = app.store.db.all('SELECT token_name,issuer,source,operation,issue_id,topic_id,success,detail FROM mcp_audit ORDER BY id');
+  assert.ok(audit.some((r) => r.success === 1 && r.issuer === '网页' && r.source === 'MCP' && r.issue_id === a));
+  assert.ok(audit.some((r) => r.success === 0 && r.issue_id === b && /不包含/.test(r.detail)));
+  assert.ok(!JSON.stringify(audit).includes(one.code) && !JSON.stringify(audit).includes(all.code));
+  await api(`/feedbacks/${a}`, { method: 'DELETE' });
+  await api(`/feedbacks/${b}`, { method: 'DELETE' });
 });
 test('MCP：搜索、条件、分页、详情、相似、方案、统计', async () => {
   const a = await add({ text: '导出PDF提示文件损坏，错误码 E-2031', reporter: '王经理', severity: 'urgent' });
@@ -157,7 +194,7 @@ test('经本机穿透代理：域名访问网页登录和 MCP 正常，跨站来
 });
 test('旧数据库自动升级，数据不变', () => {
   const d = tmp(), f = path.join(d, 'a.db'), db = new Db(f);
-  db.raw.exec(`DROP TABLE api_tokens; PRAGMA user_version=1; INSERT INTO feedbacks(title,created_at,updated_at) VALUES('旧',1,1)`); db.close();
+  db.raw.exec(`DROP TABLE mcp_audit; DROP TABLE mcp_authorizations; DROP TABLE api_tokens; PRAGMA user_version=1; INSERT INTO feedbacks(title,created_at,updated_at) VALUES('旧',1,1)`); db.close();
   const n = new Db(f);
   assert.equal(n.get('SELECT title FROM feedbacks')!.title, '旧'); assert.equal(n.all('SELECT * FROM api_tokens').length, 0);
   n.close(); fs.rmSync(d, { recursive: true, force: true });

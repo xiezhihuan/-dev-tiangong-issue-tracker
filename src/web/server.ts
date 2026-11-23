@@ -8,6 +8,7 @@ import fstatic from '@fastify/static';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { ROOT, type Config } from '../config.js';
 import { registerMcp, Tokens } from '../mcp/http.js';
+import { Authorizations } from '../mcp/auth.js';
 import { accessUrls } from './access.js';
 import { fmtTime, toCsv, toJson, toMarkdown } from '../exports.js';
 import { logger } from '../log.js';
@@ -183,9 +184,18 @@ export async function createServer({ config, store, media, bot, startedAt }: Web
 
   // ───── MCP ─────
   const tokens = new Tokens(store);
-  registerMcp(app, { store, media, tokens });
+  const authorizations = new Authorizations(store);
+  registerMcp(app, { store, media, tokens, authorizations });
   app.post('/api/mcp-tokens', async (req) => tokens.create(String(body(req).name ?? '')));
   app.delete('/api/mcp-tokens/:id', async (req) => { tokens.remove(id(req)); return { ok: true }; });
+  app.post('/api/mcp-authorizations', async (req) => {
+    const b = body(req), scope = b.scope === 'all' ? 'all' : b.scope === 'issue' ? 'issue' : null;
+    if (!scope) throw new UserError('授权范围无效');
+    const issueId = b.issue_id === undefined || b.issue_id === '' ? undefined : Number(b.issue_id);
+    return authorizations.create(scope, issueId, ACTOR);
+  });
+  app.delete('/api/mcp-authorizations/:id', async (req) => { authorizations.revoke(id(req)); return { ok: true }; });
+  app.get('/api/mcp-audit', async (req) => authorizations.auditList(Number((req.query as any).limit) || 100));
 
   // ───── 设置 ─────
   const kind = (req: FastifyRequest): 'category' | 'product' => {
@@ -200,7 +210,7 @@ export async function createServer({ config, store, media, bot, startedAt }: Web
     ocr: media.ocr ? 'ready' : config.ocr ? 'unavailable' : 'disabled',
     queue: store.db.get(`SELECT COALESCE(SUM(status='pending'),0) downloading, COALESCE(SUM(status='failed'),0) failed, COALESCE(SUM(status='done' AND ocr_status='pending'),0) recognizing FROM attachments`),
     users: store.db.all('SELECT openid,nickname,bound_at FROM qq_users ORDER BY bound_at'),
-    tokens: tokens.list(), access: accessUrls(config, (app.server.address() as AddressInfo).port), publicUrl: config.publicUrl,
+    tokens: tokens.list(), authorizations: authorizations.list(), mcpAudit: authorizations.auditList(100), access: accessUrls(config, (app.server.address() as AddressInfo).port), publicUrl: config.publicUrl,
     mergeWindowMinutes: config.mergeWindowMs / 60_000, startedAt, dataDir: config.dataDir,
   }));
   app.post('/api/bind-code', async () => {

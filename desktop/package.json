@@ -1,7 +1,7 @@
 {
   "name": "tiangong-feedback-desktop",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "用户反馈库 macOS 客户端",
   "main": "main.cjs",
   "devDependencies": {

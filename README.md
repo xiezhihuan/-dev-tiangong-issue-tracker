@@ -4,7 +4,7 @@
 |---|---|
 | **QQ 机器人** | 在 QQ 里发消息就能提交新问题（文字、截图、语音、文件） |
 | **网页 / 手机** | 查看历史提交记录，搜索、筛选、看截图、处理。手机可加到主屏幕 |
-| **MCP** | Claude Code、Codex 等 AI 助手查询问题库（只读） |
+| **MCP** | Claude Code、Codex 等 AI 助手查询问题库，也可用管理员签发的短期授权受控修改 |
 
 - **不丢**：先落库再回执；断线、重启期间的消息由 QQ 平台补发；附件失败自动重试。**没收到回执就等于没记上。**
 - **可分析**：截图/语音里的文字可搜；自动识别分类、产品、版本；同类问题可归并，沉淀原因与方案；可统计、可导出 Excel(CSV)/Markdown/JSON。
@@ -68,6 +68,25 @@ http_headers = { "Authorization" = "Bearer 令牌" }
 | `list_known_problems` | 同类问题的原因与方案 |
 | `get_overview` | 统计与可用筛选值 |
 | `get_attachment` | 看截图、读日志文本 |
+| `update_issue` | 用临时授权码修改一个问题的字段；单问题码只能修改指定编号 |
+| `update_known_problem` | 用全部问题授权码修改同类问题的标题、原因、方案或状态 |
+
+### MCP 受控写入
+
+访问令牌只证明 MCP 客户端身份，不能直接写入。管理员登录网页后打开「设置 → AI 助手」，在「临时写入授权」里签发一种授权码：
+
+- **单问题码**：填写问题编号后签发，只能更新这个问题。它不能修改同类问题、级联解决，也不能把问题移入其他同类问题。
+- **全部问题码**：可以更新所有问题，也可以更新同类问题和级联解决。授权码最长 15 分钟，到期后服务端拒绝写入。
+
+签发后页面只显示一次明文授权码，复制给 MCP 对话使用，不要放进代码仓库、示例、脚本或日志。调用 `update_issue` 或 `update_known_problem` 时把它作为 `authorization_code` 传入，操作人由服务端从当前网页登录授权和 MCP Bearer 令牌确定，客户端不能自填。服务端会记录授权人、MCP 令牌名称、作用对象、结果和时间，查询工具的用法与返回格式保持兼容。
+
+示例请求参数：
+
+```json
+{"id":12,"authorization_code":"页面刚签发的码","status":"resolved","resolution":"升级到 V3.2.2"}
+```
+
+使用完毕后在设置页撤销授权或等待到期。撤销 MCP 访问令牌会立即阻止该客户端的查询和写入。
 
 ## 怎么记
 
@@ -103,10 +122,10 @@ http_headers = { "Authorization" = "Bearer 令牌" }
 ## 开发
 
 ```bash
-npm test            # 61 项单元/集成测试
+npm test            # 62 项单元/集成测试
 npm run test:e2e    # 真实 Chrome + 真实 OCR + 模拟 QQ 平台，截图在 test-output/
 npm run typecheck
 ```
 
-`src/qq` QQ 协议 · `intake.ts` 收录与指令 · `store.ts` 数据与查询 · `text.ts` 分类/相似度 · `media.ts` 附件 · `ocr.ts` 识别 · `web/` 接口 · `mcp/` AI 助手查询 · `public/` 页面 · `desktop/` 桌面客户端。
+`src/qq` QQ 协议 · `intake.ts` 收录与指令 · `store.ts` 数据与查询 · `text.ts` 分类/相似度 · `media.ts` 附件 · `ocr.ts` 识别 · `web/` 接口 · `mcp/` AI 助手查询与受控写入 · `public/` 页面 · `desktop/` 桌面客户端。
 调研与取舍见 [docs/调研.md](docs/调研.md)，验收步骤见 [docs/验收清单.md](docs/验收清单.md)。

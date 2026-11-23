@@ -1,0 +1,20 @@
+{
+  "name": "tiangong-feedback-desktop",
+  "private": true,
+  "version": "1.0.0",
+  "description": "用户反馈库 macOS 客户端",
+  "main": "main.cjs",
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.0"
+  },
+  "scripts": {
+    "start": "electron .",
+    "test": "node --import tsx --test test/*.test.mts",
+    "test:e2e": "node --import tsx test/e2e.mts",
+    "build:mac": "ELECTRON_MIRROR=${ELECTRON_MIRROR:-https://npmmirror.com/mirrors/electron/} ELECTRON_BUILDER_BINARIES_MIRROR=${ELECTRON_BUILDER_BINARIES_MIRROR:-https://npmmirror.com/mirrors/electron-builder-binaries/} node build.mjs mac",
+    "build:win": "ELECTRON_MIRROR=${ELECTRON_MIRROR:-https://npmmirror.com/mirrors/electron/} ELECTRON_BUILDER_BINARIES_MIRROR=${ELECTRON_BUILDER_BINARIES_MIRROR:-https://npmmirror.com/mirrors/electron-builder-binaries/} node build.mjs win"
+  },
+  "author": "Tiangong"
+}

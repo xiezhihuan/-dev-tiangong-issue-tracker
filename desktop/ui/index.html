@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:">
+<title>天工反馈</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<svg width="0" height="0" class="sprite" aria-hidden="true">
+  <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-stetho" viewBox="0 0 24 24"><path d="M5 3v6a5 5 0 0 0 10 0V3M10 14v2a5 5 0 0 0 10 0v-2"/><circle cx="20" cy="12" r="2"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H11l-5 4v-4H4z"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></symbol>
+  <symbol id="i-ai" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4V4h11v1"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-ext" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+</svg>
+
+<section class="cover drag" id="cover" hidden>
+  <div class="cover-inner">
+    <div class="cover-logo"><svg><use href="#i-chat"/></svg></div>
+    <h1>天工反馈</h1>
+    <p class="tagline">在 QQ 里随手提交问题，电脑、手机、AI 助手都能查</p>
+    <div class="features">
+      <div><span class="ic blue"><svg><use href="#i-chat"/></svg></span><b>QQ 提交</b><span>文字、截图、语音发给机器人就记下，截图文字自动识别</span></div>
+      <div><span class="ic green"><svg><use href="#i-phone"/></svg></span><b>电脑和手机查看</b><span>同一局域网扫码就能打开，搜索、筛选、看截图</span></div>
+      <div><span class="ic orange"><svg><use href="#i-ai"/></svg></span><b>AI 助手查询</b><span>Claude、Codex 通过 MCP 查以前的问题和处理办法</span></div>
+    </div>
+    <button class="btn primary big" id="startBtn">开始设置<svg><use href="#i-arrow"/></svg></button>
+    <button class="link" id="importBtn">我用过旧版，导入已有数据</button>
+    <div class="muted">大约 3 分钟 · 数据只保存在这台电脑</div>
+  </div>
+</section>
+
+<div class="app" id="app" hidden>
+  <nav class="nav drag" id="nav">
+    <div class="brand"><span class="brand-logo"><svg><use href="#i-chat"/></svg></span>天工反馈</div>
+    <button class="nav-item" data-view="status"><svg><use href="#i-pulse"/></svg>运行状态</button>
+    <button class="nav-item" data-view="settings"><svg><use href="#i-gear"/></svg>设置</button>
+    <button class="nav-item" data-view="doctor"><svg><use href="#i-stetho"/></svg>诊断</button>
+    <div class="spacer"></div>
+    <button class="btn primary" data-open="">打开问题库</button>
+    <div class="nav-foot" id="version"></div>
+  </nav>
+  <main class="main">
+    <div class="dragbar drag"></div>
+
+    <section class="view" id="view-status" hidden>
+      <div class="card hero"><div class="dot" id="heroDot"></div><div class="grow"><div class="hero-title" id="heroTitle"></div><div class="sub" id="heroSub"></div></div><button class="btn" id="restartBtn">重启服务</button></div>
+      <div class="alert" id="alert" hidden><div class="grow" id="alertText"></div><button class="btn small" id="alertFix" hidden></button><button class="btn small" id="alertPort" hidden>换一个端口</button></div>
+      <div class="nums" id="nums"></div>
+      <div class="cols">
+        <div class="card pad" id="phoneCard"></div>
+        <div>
+          <div class="card pad" id="qqCard"></div>
+          <div class="card pad" id="webCard"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="view-settings" hidden>
+      <div class="wizard" id="wizard">
+        <header class="wz-head"><div class="wz-title" id="wzTitle"></div><div class="sub" id="wzSub"></div></header>
+        <ol class="stepper" id="stepper"></ol>
+        <form id="form" autocomplete="off" novalidate>
+          <div class="panel" data-step="qq">
+            <h3>连接 QQ 机器人</h3><p class="sub">把问题发给机器人就会记录。机器人是 QQ 官方的，免费，不会封号</p>
+            <details class="callout" id="qqHelp"><summary>还没有机器人？看怎么创建</summary>
+              <ol><li><button type="button" class="link" data-ext="qq">打开 QQ 开放平台<svg><use href="#i-ext"/></svg></button> 注册并创建「机器人」</li><li>在「开发管理」里拿到 AppID 和 AppSecret（Secret 只显示一次）</li><li>事件接收方式选 <b>WebSocket</b></li><li>「沙箱配置」里加上自己的 QQ，扫码添加机器人</li></ol></details>
+            <div class="field"><label for="qqAppId">AppID</label><input id="qqAppId" name="qqAppId" inputmode="numeric" placeholder="机器人的 AppID，一串数字"></div>
+            <div class="field"><label for="qqSecret">AppSecret</label><input id="qqSecret" name="qqSecret" type="password" placeholder="加密保存"></div>
+            <div class="row"><button type="button" class="btn" id="testQQ">测试连接</button><div class="result" id="qqResult" hidden></div></div>
+            <label class="check"><input type="checkbox" name="skipQQ"> 暂不连接 QQ（只用网页和手机提交、查看）</label>
+          </div>
+          <div class="panel" data-step="access">
+            <h3>电脑和手机怎么访问</h3><p class="sub">浏览器和手机用同一个密码登录；这个 App 自动登录</p>
+            <div class="field"><label for="adminPassword">登录密码</label><div class="inrow"><input id="adminPassword" name="adminPassword" type="password" placeholder="至少 8 位"><button type="button" class="icon-btn" id="eye" title="显示密码"><svg><use href="#i-eye"/></svg></button><button type="button" class="btn" id="genPw">生成</button></div><span class="hint" id="pwHint"></span></div>
+            <div class="field"><label>访问范围</label><div class="seg"><label><input type="radio" name="scope" value="lan"><span>局域网内都能打开</span></label><label><input type="radio" name="scope" value="local"><span>仅这台电脑</span></label></div><span class="hint" id="scopeHint"></span></div>
+            <div class="field inline"><label for="port">端口</label><input id="port" name="port" type="number" min="1024" max="65535"></div>
+            <details class="callout" id="publicBox"><summary>外网访问（可以以后再配）</summary>
+              <p>先用内网穿透或反向代理，把一个 HTTPS 域名指到这台电脑的 <b id="pubPort"></b>，再把域名填在这里，二维码会换成外网地址。</p>
+              <div class="field"><label for="publicUrl">外网地址</label><div class="inrow"><input id="publicUrl" name="publicUrl" placeholder="https://fb.example.com"><button type="button" class="btn" id="testPublic">测试</button></div><div class="result" id="pubResult" hidden></div><span class="hint">穿透客户端装在这台电脑上即可。开放外网时，登录密码至少 12 位</span></div></details>
+          </div>
+          <div class="panel" data-step="ai">
+            <h3>AI 助手（MCP）</h3><p class="sub">让 Claude Code、Codex 等查询问题库。只读，不能修改</p>
+            <div id="tokens"></div>
+            <div class="inrow"><input id="tokenName" placeholder="名称，如 我的 Claude" aria-label="令牌名称"><button type="button" class="btn" id="mkToken">生成访问令牌</button></div>
+            <div id="tokenOut"></div>
+          </div>
+          <div class="panel" data-step="general">
+            <h3 id="genTitle"></h3><div class="summary" id="summary" hidden></div>
+            <label class="switch"><span><b>新问题通知</b><small>有人在 QQ 里提交时，在屏幕角落提醒</small></span><input type="checkbox" name="notify"></label>
+            <label class="switch"><span><b>开机自动运行</b><small>登录电脑后在<span class="w-tray">菜单栏</span>常驻，不打开窗口</small></span><input type="checkbox" name="autostart"></label>
+            <label class="switch"><span><b>运行时不自动休眠</b><small>休眠时收不到 QQ 消息。屏幕仍会熄灭；笔记本合盖仍会休眠</small></span><input type="checkbox" name="keepAwake"></label>
+            <label class="switch"><span><b>识别截图文字</b><small>在本机离线识别，识别后可以搜索</small></span><input type="checkbox" name="ocr"></label>
+            <div class="field inline"><label for="mergeMinutes">连续消息合并时间（分钟）</label><input id="mergeMinutes" name="mergeMinutes" type="number" min="0" max="120"></div>
+          </div>
+          <div class="panel" data-step="bind">
+            <h3>最后一步：绑定你的 QQ</h3><p class="sub">只有绑定过的 QQ 才能提交和查询，别人加了机器人也用不了</p>
+            <div class="bindbox" id="bindBox"></div>
+          </div>
+          <div class="form-error" id="formError" role="alert"></div>
+          <div class="fixrow" id="portFix" hidden></div>
+          <footer class="wz-foot"><button type="button" class="btn ghost" id="backBtn">上一步</button><span class="grow"></span><span class="muted" id="stepCount"></span><button type="submit" class="btn primary" id="nextBtn"></button></footer>
+        </form>
+      </div>
+    </section>
+
+    <section class="view" id="view-doctor" hidden>
+      <div class="page-head"><div><h1>诊断</h1><p class="sub">检查服务、网络、QQ 和文字识别，不会发送任何消息</p></div><button class="btn primary" id="doctorBtn">开始自检</button></div>
+      <div class="card list" id="checks"><div class="empty">点「开始自检」，需要几秒</div></div>
+      <div class="card list"><div class="item"><div class="grow"><b>数据文件夹</b><div class="sub mono" id="dataDir"></div></div><button class="btn small" data-path="data">打开</button></div><div class="item"><div class="grow"><b>运行日志</b><div class="sub">反馈问题时附上它</div></div><button class="btn small" data-path="log">显示</button></div></div>
+      <div class="card list danger"><div class="item"><div class="grow"><b>清空所有数据</b><div class="sub">移到<span class="w-trash">废纸篓</span>，回到刚安装时的状态</div></div><button class="btn bad" id="resetBtn">清空…</button></div></div>
+    </section>
+  </main>
+</div>
+
+<dialog id="importDlg"><h3>导入旧版数据</h3><div id="importBody"></div><div class="row end"><button class="btn" id="importCancel">取消</button><button class="btn primary" id="importOk">用这些数据</button></div></dialog>
+<div id="toast" role="status" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>

@@ -65,6 +65,10 @@ const MIGRATIONS: string[] = [
   -- QQ 引用索引 → 反馈编号，用于「引用某条消息补充」
   CREATE TABLE qq_refs (ref TEXT PRIMARY KEY, feedback_id INTEGER NOT NULL, created_at INTEGER NOT NULL);
   `,
+  `
+  -- MCP 访问令牌，只存哈希
+  CREATE TABLE api_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, hash TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL, last_used_at INTEGER);
+  `,
 ];
 
 export class Db {

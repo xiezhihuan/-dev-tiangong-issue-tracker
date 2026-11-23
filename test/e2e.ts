@@ -2,7 +2,9 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { chromium, type Page } from 'playwright-core';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { chromium, devices, type Page } from 'playwright-core';
 import { startApp } from '../src/app.js';
 import { ROOT } from '../src/config.js';
 import { createOcr } from '../src/ocr.js';
@@ -135,16 +137,52 @@ try {
   assert.match(fs.readFileSync(await (await dl).path(), 'utf8'), /导出组件版本不兼容/);
   ok('导出');
 
-  for (const [n, scheme, hash] of [['6-手机列表', 'light', '/#/feedbacks'], ['7-手机详情-深色', 'dark', '/#/feedbacks/1']] as const) {
-    const m = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: scheme });
-    await watch(m);
-    await m.context().addCookies(await p.context().cookies());
-    await m.goto(app.url + hash); await m.locator('header').waitFor();
-    const over = await m.evaluate(() => document.documentElement.scrollWidth - innerWidth);
-    assert.ok(over <= 0, `手机端横向溢出 ${over}px`);
-    await m.screenshot({ path: path.join(OUT, n + '.png') });
-  }
-  ok('手机宽度无横向溢出、深色模式');
+  await p.goto(app.url + '/#/settings'); await p.getByRole('button', { name: '生成访问令牌' }).waitFor();
+  await p.getByLabel('令牌名称').fill('我的 Claude'); await p.getByRole('button', { name: '生成访问令牌' }).click();
+  const cmd = await p.locator('#mcp-out .cmd').first().innerText(), token = /Bearer (tgm_[\w-]+)/.exec(cmd)![1]!;
+  assert.ok(cmd.startsWith(`claude mcp add --transport http --scope user tiangong-feedback ${app.url}/mcp `), cmd);
+  await p.screenshot({ path: path.join(OUT, '8-MCP设置.png'), fullPage: true });
+  const mcp = new Client({ name: 'e2e', version: '1' });
+  await mcp.connect(new StreamableHTTPClientTransport(new URL(app.url + '/mcp'), { requestInit: { headers: { Authorization: `Bearer ${token}` } } }));
+  const found: any = JSON.parse(((await mcp.callTool({ name: 'search_issues', arguments: { query: '2031' } })) as any).content[0].text);
+  assert.deepEqual(found.issues.map((i: any) => i.id), [4, 1]);
+  const shot: any = await mcp.callTool({ name: 'get_attachment', arguments: { id: 1 } });
+  assert.equal(shot.content[1].type, 'image');
+  await mcp.close();
+  ok('网页生成 MCP 令牌 → 客户端按截图里的文字查到问题并看到截图');
+
+  const mctx = await browser.newContext({ ...devices['iPhone 13'] });
+  const m = await mctx.newPage();
+  await watch(m);
+  await m.goto(app.url); await m.getByLabel('密码').fill('test-password'); await m.getByRole('button', { name: '登录' }).tap();
+  await m.locator('.rec').first().waitFor();
+  const noOverflow = async (what: string) => { const o = await m.evaluate(() => document.documentElement.scrollWidth - innerWidth); assert.ok(o <= 0, `${what}横向溢出 ${o}px`); };
+  assert.equal(await m.locator('.rec').count(), 4);
+  assert.equal(await m.locator('table').isVisible(), false);
+  for (const t of ['已解决', '待处理', 'QQ', '网页']) assert.ok(await m.locator('.rec', { hasText: t }).first().isVisible(), t);
+  await until(async () => m.locator('.rec img').first().evaluate((i: any) => i.naturalWidth > 0));
+  await noOverflow('列表'); await m.screenshot({ path: path.join(OUT, '6-手机列表.png') });
+  await m.getByRole('button', { name: '筛选' }).tap();
+  await m.screenshot({ path: path.join(OUT, '9-手机筛选.png') }); await noOverflow('筛选');
+  await m.getByLabel('全部来路').selectOption('web'); await m.getByText('共 1 条').waitFor();
+  await m.getByRole('button', { name: '筛选 1' }).waitFor();
+  await m.goto(app.url + '/#/feedbacks'); await m.getByText('共 4 条').waitFor();
+  await m.getByLabel('搜索').fill('2031'); await m.getByLabel('搜索').press('Enter'); await m.getByText('共 2 条').waitFor();
+  await m.locator('.rec').last().tap(); await m.getByRole('heading', { name: /#1/ }).waitFor();
+  await until(async () => m.locator('.att img').first().evaluate((i: any) => i.naturalWidth > 0));
+  await noOverflow('详情'); await m.screenshot({ path: path.join(OUT, '7-手机详情.png') });
+  await m.locator('.att img').first().tap(); await m.locator('dialog.img img').waitFor(); await m.locator('dialog.img').tap();
+  for (const h of ['topics', 'topics/1', 'stats', 'settings']) { await m.goto(`${app.url}/#/${h}`); await m.locator('main .card, main .tablewrap').first().waitFor(); await noOverflow(h); await m.screenshot({ path: path.join(OUT, `10-手机-${h.replace('/', '-')}.png`) }); }
+  await m.emulateMedia({ colorScheme: 'dark' }); await m.locator('nav a', { hasText: '提交记录' }).tap(); await m.locator('.rec').first().waitFor();
+  await m.screenshot({ path: path.join(OUT, '11-手机深色.png') });
+  // 在 QQ 里提交后切回页面，记录自动出现
+  mock.say(U, '提交：手机端看得到新记录吗'); await reply(/已记录 #5/);
+  await m.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await m.locator('.rec', { hasText: '手机端看得到新记录吗' }).waitFor();
+  const wm: any = await (await fetch(app.url + '/manifest.webmanifest')).json();
+  for (const i of wm.icons) assert.equal((await fetch(`${app.url}/${i.src}`)).status, 200);
+  await mctx.close();
+  ok('手机：卡片列表、筛选、搜索、看截图、各页无溢出、深色、QQ 提交后刷新可见、可加到主屏幕');
   await p.getByRole('button', { name: '退出' }).click(); await p.getByLabel('密码').waitFor();
   ok('退出登录');
   assert.deepEqual(errors, [], '浏览器控制台报错');

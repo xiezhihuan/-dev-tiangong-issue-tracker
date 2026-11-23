@@ -23,8 +23,11 @@
     "@fastify/cookie": "^11.1.5",
     "@fastify/multipart": "^10.1.9",
     "@fastify/static": "^10.1.12",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "fastify": "^5.12.8",
-    "ws": "^8.23.0"
+    "qrcode-generator": "^1.4.4",
+    "ws": "^8.23.0",
+    "zod": "^4.6.7"
   },
   "optionalDependencies": {
     "@napi-rs/canvas": "^1.2.0",

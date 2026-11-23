@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import type { Db, Row } from './db.js';
 import { classify, classifyProduct, clip, detectVersion, likeEscape, makeTitle, parseMeta, SimilarityIndex, splitTags, type TaxItem } from './text.js';
 
@@ -17,7 +18,7 @@ export class UserError extends Error {
 export interface NewAttachment { kind: 'image' | 'voice' | 'video' | 'file'; filename?: string; mime?: string; size?: number; url?: string; text?: string; path?: string; sha256?: string }
 export interface NewMessage { channel: 'qq' | 'web'; dedupeKey?: string; author: string; kind: 'report' | 'note'; text: string; raw?: unknown; sentAt: number; attachments: NewAttachment[] }
 export interface Filter {
-  q?: string; status?: string; category?: string; product?: string; severity?: string; topic?: string; reporter?: string; tag?: string;
+  q?: string; status?: string; category?: string; product?: string; severity?: string; topic?: string; reporter?: string; tag?: string; channel?: string;
   from?: number; to?: number; deleted?: boolean; sort?: string; page?: number; pageSize?: number;
 }
 
@@ -229,6 +230,13 @@ export class Store {
     this.db.run('INSERT INTO events(feedback_id,at,actor,action,detail) VALUES(?,?,?,?,?)', id, this.now(), actor, action, detail);
   }
 
+  /** 一次性绑定码，10 分钟有效。 */
+  createBindCode(): { code: string; exp: number } {
+    const v = { code: String(crypto.randomInt(10_000_000, 100_000_000)), exp: this.now() + 10 * 60_000 };
+    this.db.kvSet('bind_code', JSON.stringify(v));
+    return v;
+  }
+
   // ───────── 读取 ─────────
 
   require(id: number): Row {
@@ -255,6 +263,7 @@ export class Store {
     if (f.topic === 'none') c.push('f.topic_id IS NULL');
     else if (f.topic) { c.push('f.topic_id=?'); a.push(Number(f.topic)); }
     if (f.tag) { c.push('EXISTS (SELECT 1 FROM feedback_tags t WHERE t.feedback_id=f.id AND t.tag=?)'); a.push(f.tag); }
+    if (f.channel) { c.push(`(SELECT m.channel FROM messages m WHERE m.feedback_id=f.id AND m.kind<>'command' ORDER BY m.sent_at,m.id LIMIT 1)=?`); a.push(f.channel); }
     if (f.from) { c.push('f.created_at>=?'); a.push(f.from); }
     if (f.to) { c.push('f.created_at<?'); a.push(f.to); }
     return { sql: c.join(' AND '), args: a };
@@ -270,6 +279,10 @@ export class Store {
         (SELECT title FROM topics t WHERE t.id=f.topic_id) topic_title,
         (SELECT COUNT(*) FROM messages m WHERE m.feedback_id=f.id) message_count,
         (SELECT COUNT(*) FROM attachments x JOIN messages m ON m.id=x.message_id WHERE m.feedback_id=f.id) attachment_count,
+        (SELECT m.channel FROM messages m WHERE m.feedback_id=f.id ORDER BY m.sent_at,m.id LIMIT 1) channel,
+        (SELECT m.author FROM messages m WHERE m.feedback_id=f.id ORDER BY m.sent_at,m.id LIMIT 1) author,
+        COALESCE((SELECT substr(m.text,1,300) FROM messages m WHERE m.feedback_id=f.id AND m.kind='report' AND m.text<>'' ORDER BY m.sent_at,m.id LIMIT 1),'') excerpt,
+        (SELECT x.id FROM attachments x JOIN messages m ON m.id=x.message_id WHERE m.feedback_id=f.id AND x.status='done' AND x.mime LIKE 'image/%' ORDER BY x.id LIMIT 1) thumb,
         (SELECT group_concat(tag,',') FROM feedback_tags t WHERE t.feedback_id=f.id) tags
        FROM feedbacks f WHERE ${w.sql} ORDER BY ${order} LIMIT ? OFFSET ?`,
       ...w.args, size, (Math.max(f.page ?? 1, 1) - 1) * size);
@@ -290,11 +303,17 @@ export class Store {
   }
 
   similar(id: number, limit = 5): Row[] {
-    const docs = this.db.all(`SELECT f.id, f.title||char(10)||COALESCE((SELECT group_concat(m.text,char(10)) FROM messages m WHERE m.feedback_id=f.id AND m.kind='report'),'')
+    const docs = this.corpus(id), self = docs.find((d) => d.id === id);
+    return self ? this.rank(self, docs, limit) : [];
+  }
+  /** 与任意一段文字相似的反馈。 */
+  similarText(text: string, limit = 5): Row[] { return this.rank({ id: -1, text }, this.corpus(-1), limit); }
+  private corpus(id: number): { id: number; text: string }[] {
+    return this.db.all(`SELECT f.id, f.title||char(10)||COALESCE((SELECT group_concat(m.text,char(10)) FROM messages m WHERE m.feedback_id=f.id AND m.kind='report'),'')
         ||char(10)||COALESCE((SELECT group_concat(a.text,char(10)) FROM attachments a JOIN messages m ON m.id=a.message_id WHERE m.feedback_id=f.id),'') text
       FROM feedbacks f WHERE f.deleted_at IS NULL OR f.id=?`, id) as { id: number; text: string }[];
-    const self = docs.find((d) => d.id === id);
-    if (!self) return [];
+  }
+  private rank(self: { id: number; text: string }, docs: { id: number; text: string }[], limit: number): Row[] {
     return this.sim.query(self, docs, limit).map((h) => ({
       ...this.db.get('SELECT f.id,f.title,f.status,f.category,f.resolution,f.topic_id,f.created_at,t.title topic_title,t.solution topic_solution FROM feedbacks f LEFT JOIN topics t ON t.id=f.topic_id WHERE f.id=?', h.id)!,
       score: Math.round(h.score * 100) / 100,

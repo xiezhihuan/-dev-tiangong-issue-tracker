@@ -10,8 +10,11 @@ export interface Config {
   port: number;
   dataDir: string;
   adminPassword: string;
-  trustProxy: boolean;
+  /** true / false，或只信任来自某处的代理，如 loopback（本机上的穿透客户端）。 */
+  trustProxy: boolean | string;
   cookieSecure: boolean;
+  /** 对外访问地址（如 https://fb.example.com），用于生成手机二维码和 MCP 配置。 */
+  publicUrl: string;
   qq: { appId: string; secret: string; apiBase: string };
   /** 同一人连续发送的消息在此时间内自动并入同一条反馈。 */
   mergeWindowMs: number;
@@ -43,8 +46,9 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     port: num(env, 'PORT', 8787),
     dataDir: path.resolve(ROOT, env.DATA_DIR?.trim() || 'data'),
     adminPassword: env.ADMIN_PASSWORD ?? '',
-    trustProxy: bool(env.TRUST_PROXY, false),
+    trustProxy: env.TRUST_PROXY?.trim() === 'loopback' ? 'loopback' : bool(env.TRUST_PROXY, false),
     cookieSecure: bool(env.COOKIE_SECURE, false),
+    publicUrl: (env.PUBLIC_URL?.trim() ?? '').replace(/\/+$/, ''),
     qq: {
       appId: env.QQ_APP_ID?.trim() ?? '',
       secret: env.QQ_APP_SECRET?.trim() ?? '',
@@ -64,6 +68,7 @@ export function validateConfig(c: Config): string[] {
   const errs: string[] = [];
   if (c.adminPassword.length < 8) errs.push('ADMIN_PASSWORD 未设置或少于 8 位（网页后台登录密码）');
   if (c.adminPassword === 'change-me-please') errs.push('ADMIN_PASSWORD 仍是示例值，请修改');
+  if (c.publicUrl && !/^https?:\/\/[^/]+/.test(c.publicUrl)) errs.push('PUBLIC_URL 须以 http:// 或 https:// 开头');
   if (Boolean(c.qq.appId) !== Boolean(c.qq.secret)) errs.push('QQ_APP_ID 与 QQ_APP_SECRET 必须同时填写');
   return errs;
 }

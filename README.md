@@ -1,10 +1,18 @@
 # 用户反馈库
 
-人在外面，微信里收到客户反馈 → 转发给 QQ 机器人 → 自动入库、识别截图文字、归类、提示以前的同类问题和处理办法。
+| 入口 | 做什么 |
+|---|---|
+| **QQ 机器人** | 在 QQ 里发消息就能提交新问题（文字、截图、语音、文件） |
+| **网页 / 手机** | 查看历史提交记录，搜索、筛选、看截图、处理。手机可加到主屏幕 |
+| **MCP** | Claude Code、Codex 等 AI 助手查询问题库（只读） |
 
 - **不丢**：先落库再回执；断线、重启期间的消息由 QQ 平台补发；附件失败自动重试。**没收到回执就等于没记上。**
 - **可分析**：截图/语音里的文字可搜；自动识别分类、产品、版本；同类问题可归并，沉淀原因与方案；可统计、可导出 Excel(CSV)/Markdown/JSON。
-- **数据不出公司**：单进程 + SQLite，OCR 本地离线，不调用任何第三方 AI。
+- **数据不出公司**：单进程 + SQLite，OCR 本地离线，自身不调用第三方 AI。（经 MCP 查询时，查到的内容会进入你所用的 AI 助手。）
+
+## 桌面软件（推荐）
+
+macOS：打开 `天工反馈-*.dmg`，把「天工反馈」拖进「应用程序」，打开；Windows：运行 `天工反馈-*-x64-setup.exe`。然后按引导设置：QQ 机器人 → 访问方式 → 确认 → 绑定 QQ。浏览器、手机和 MCP 照常可用，默认监听 0.0.0.0。打包与细节见 [desktop/README.md](desktop/README.md)。以下是命令行 / 服务器部署方式。
 
 ## 先体验（不需要 QQ 账号）
 
@@ -37,6 +45,30 @@ Linux 裸机安装时加 `ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm ci`，避免下
 
 **3. 绑定**：网页后台「设置 → QQ 账号 → 生成绑定码」，把「绑定 12345678」发给机器人。只有绑定过的 QQ 能记录和查询。
 
+**4. 手机查看**：`.env` 里 `HOST=0.0.0.0` 时，手机连同一 Wi-Fi，扫「设置 → 手机查看」的二维码，用登录密码进入。在外面用需要 HTTPS 域名或内网穿透，把对外地址填到 `PUBLIC_URL`（见「运维」）。Docker 部署要把端口映射改成 `8787:8787` 并填 `PUBLIC_URL`。
+
+**5. 接入 AI 助手（MCP）**：「设置 → AI 助手」生成访问令牌，页面会给出可直接复制的命令：
+
+```bash
+# Claude Code
+claude mcp add --transport http --scope user tiangong-feedback http://127.0.0.1:8787/mcp --header "Authorization: Bearer 令牌"
+```
+```toml
+# Codex：~/.codex/config.toml
+[mcp_servers.tiangong-feedback]
+url = "http://127.0.0.1:8787/mcp"
+http_headers = { "Authorization" = "Bearer 令牌" }
+```
+
+| 工具 | 用途 |
+|---|---|
+| `search_issues` | 关键词、状态、分类、产品、客户、日期等条件搜索；不填即浏览历史 |
+| `get_issue` | 全文、截图识别文字、处理结果、相似问题 |
+| `find_similar_issues` | 给一段描述或报错，找以前的同类问题和处理办法 |
+| `list_known_problems` | 同类问题的原因与方案 |
+| `get_overview` | 统计与可用筛选值 |
+| `get_attachment` | 看截图、读日志文本 |
+
 ## 怎么记
 
 | 微信里收到 | 怎么发给机器人 |
@@ -46,10 +78,11 @@ Linux 裸机安装时加 `ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm ci`，避免下
 | 一段对话 | 截图（长截图也行），文字会自动识别 |
 | 语音 | 微信里转文字后复制，或直接对机器人发 QQ 语音口述 |
 
-连续发的内容 5 分钟内自动并成一条。开头写 `客户：张三`（独占一行）会自动填字段，支持：客户 产品 版本 分类 优先级 来源 标签 标题。
+发 `提交：导出报表一直转圈` 直接另起一条新问题；其余内容直接发即可，连续发的 5 分钟内自动并成一条。开头写 `客户：张三`（独占一行）会自动填字段，支持：客户 产品 版本 分类 优先级 来源 标签 标题。
 
 | 指令 | 作用 |
 |---|---|
+| `提交：内容` | 提交一条新问题（不与前面的合并） |
 | `新建` / `完成` / `撤销` / `拆分` | 另起一条 / 结束 / 撤回上一条素材 / 上一条素材拆成新反馈 |
 | 引用任意消息再发，或 `/补充 12 内容` | 追加到那条反馈 |
 | `/客户 张三`、`/产品` `/版本` `/分类` `/优先级` `/标签` `/标题` `/备注` `/状态` | 改当前这条；改别的加 `#编号`：`/客户 #12 张三` |
@@ -65,15 +98,15 @@ Linux 裸机安装时加 `ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm ci`，避免下
 - **备份**：每天一份 `data/backups/日期.db`。附件在 `data/files`（只增不改），把整个 `data` 目录同步走即可。恢复：停服务，用备份覆盖 `data/feedback.db`（并删掉 `-wal`、`-shm`）。
 - **健康检查**：`GET /healthz`；机器人状态看「设置」页。
 - **异常消息**：处理出错的原始消息在 `data/deadletter.jsonl`。
-- **对外访问**：默认只监听本机。要从外面看后台请走 HTTPS 反向代理，并设 `TRUST_PROXY=true`、`COOKIE_SECURE=true`。
+- **对外访问**：局域网是明文 HTTP，只在可信网络使用。要从外面访问请走 HTTPS 反向代理，填 `PUBLIC_URL`，并设 `TRUST_PROXY=true`、`COOKIE_SECURE=true`。
 
 ## 开发
 
 ```bash
-npm test            # 48 项单元/集成测试
+npm test            # 61 项单元/集成测试
 npm run test:e2e    # 真实 Chrome + 真实 OCR + 模拟 QQ 平台，截图在 test-output/
 npm run typecheck
 ```
 
-`src/qq` QQ 协议 · `intake.ts` 收录与指令 · `store.ts` 数据与查询 · `text.ts` 分类/相似度 · `media.ts` 附件 · `ocr.ts` 识别 · `web/` 接口 · `public/` 页面。
+`src/qq` QQ 协议 · `intake.ts` 收录与指令 · `store.ts` 数据与查询 · `text.ts` 分类/相似度 · `media.ts` 附件 · `ocr.ts` 识别 · `web/` 接口 · `mcp/` AI 助手查询 · `public/` 页面 · `desktop/` 桌面客户端。
 调研与取舍见 [docs/调研.md](docs/调研.md)，验收步骤见 [docs/验收清单.md](docs/验收清单.md)。

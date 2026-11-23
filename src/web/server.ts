@@ -1,11 +1,14 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
 import fstatic from '@fastify/static';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { ROOT, type Config } from '../config.js';
+import { registerMcp, Tokens } from '../mcp/http.js';
+import { accessUrls } from './access.js';
 import { fmtTime, toCsv, toJson, toMarkdown } from '../exports.js';
 import { logger } from '../log.js';
 import { INLINE, trustedMime, type Media } from '../media.js';
@@ -72,7 +75,7 @@ export async function createServer({ config, store, media, bot, startedAt }: Web
     }
     fails.delete(req.ip);
     const exp = String(Date.now() + TTL);
-    return reply.setCookie(COOKIE, `${exp}.${sign(exp)}`, { path: '/', httpOnly: true, sameSite: 'strict', secure: config.cookieSecure, maxAge: TTL / 1000 }).send({ ok: true });
+    return reply.setCookie(COOKIE, `${exp}.${sign(exp)}`, { path: '/', httpOnly: true, sameSite: 'strict', secure: config.cookieSecure || req.protocol === 'https', maxAge: TTL / 1000 }).send({ ok: true });
   });
   app.post('/api/logout', async (_req, reply) => reply.clearCookie(COOKIE, { path: '/' }).send({ ok: true }));
 
@@ -84,7 +87,7 @@ export async function createServer({ config, store, media, bot, startedAt }: Web
   const filter = (req: FastifyRequest): Filter => {
     const q = req.query as Record<string, string>;
     const s = (k: string) => (typeof q[k] === 'string' && q[k] ? q[k] : undefined);
-    return { q: s('q'), status: s('status'), category: s('category'), product: s('product'), severity: s('severity'), topic: s('topic'), reporter: s('reporter'), tag: s('tag'), from: day(q.from), to: day(q.to, true), deleted: q.deleted === '1', sort: s('sort'), page: Number(q.page) || 1, pageSize: Math.min(Number(q.pageSize) || 30, 200) };
+    return { q: s('q'), status: s('status'), category: s('category'), product: s('product'), severity: s('severity'), topic: s('topic'), reporter: s('reporter'), tag: s('tag'), channel: s('channel'), from: day(q.from), to: day(q.to, true), deleted: q.deleted === '1', sort: s('sort'), page: Number(q.page) || 1, pageSize: Math.min(Number(q.pageSize) || 30, 200) };
   };
   const id = (req: FastifyRequest, k = 'id'): number => Number((req.params as any)[k]);
   const body = (req: FastifyRequest): any => (req.body && typeof req.body === 'object' ? req.body : {});
@@ -177,6 +180,12 @@ export async function createServer({ config, store, media, bot, startedAt }: Web
     throw new UserError('不支持的格式', 404);
   });
 
+  // ───── MCP ─────
+  const tokens = new Tokens(store);
+  registerMcp(app, { store, media, tokens });
+  app.post('/api/mcp-tokens', async (req) => tokens.create(String(body(req).name ?? '')));
+  app.delete('/api/mcp-tokens/:id', async (req) => { tokens.remove(id(req)); return { ok: true }; });
+
   // ───── 设置 ─────
   const kind = (req: FastifyRequest): 'category' | 'product' => {
     const k = (req.params as any).kind;
@@ -190,12 +199,11 @@ export async function createServer({ config, store, media, bot, startedAt }: Web
     ocr: media.ocr ? 'ready' : config.ocr ? 'unavailable' : 'disabled',
     queue: store.db.get(`SELECT COALESCE(SUM(status='pending'),0) downloading, COALESCE(SUM(status='failed'),0) failed, COALESCE(SUM(status='done' AND ocr_status='pending'),0) recognizing FROM attachments`),
     users: store.db.all('SELECT openid,nickname,bound_at FROM qq_users ORDER BY bound_at'),
+    tokens: tokens.list(), access: accessUrls(config, (app.server.address() as AddressInfo).port), publicUrl: config.publicUrl,
     mergeWindowMinutes: config.mergeWindowMs / 60_000, startedAt, dataDir: config.dataDir,
   }));
   app.post('/api/bind-code', async () => {
-    const code = String(crypto.randomInt(10_000_000, 100_000_000)), exp = Date.now() + 10 * 60_000;
-    store.db.kvSet('bind_code', JSON.stringify({ code, exp }));
-    return { code, exp };
+    return store.createBindCode();
   });
   app.delete('/api/qq-users/:openid', async (req) => { store.db.run('DELETE FROM qq_users WHERE openid=?', (req.params as any).openid); return { ok: true }; });
 

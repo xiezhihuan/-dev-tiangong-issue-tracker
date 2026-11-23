@@ -158,7 +158,9 @@ export class Media {
       const rel = `${sha256.slice(0, 2)}/${sha256}.${ext}`;
       await fsp.mkdir(path.dirname(this.abs(rel)), { recursive: true });
       const fh = await fsp.open(tmp, 'r+'); await fh.sync(); await fh.close();
-      await fsp.rename(tmp, this.abs(rel));
+      // 内容寻址：已有同内容就不必替换（Windows 上目标正被读取时改名会失败）
+      if (fs.existsSync(this.abs(rel)) && fs.statSync(this.abs(rel)).size === size) await fsp.rm(tmp, { force: true });
+      else await fsp.rename(tmp, this.abs(rel));
       return { path: rel, sha256, size, mime: type?.mime ?? '' };
     } catch (e) {
       await fsp.rm(tmp, { force: true });

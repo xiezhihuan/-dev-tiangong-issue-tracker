@@ -86,3 +86,13 @@ test('配置校验', () => {
   assert.equal(validateConfig(readConfig({ ADMIN_PASSWORD: 'abcdefgh', QQ_APP_ID: '1' })).length, 1);
   assert.throws(() => readConfig({ PORT: 'abc' }));
 });
+test('经本机代理的 HTTPS 登录自动加 Secure；局域网 HTTP 不加；非本机来源不能伪造', async () => {
+  const d = tmp(), a = await startApp(cfg(null, d, { trustProxy: 'loopback' }), { ocr: null });
+  const b = await startApp(cfg(null, d + 'b'), { ocr: null });
+  const lg = async (x: App, h: Record<string, string>) => (await fetch(x.url + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-requested-with': 'tg', ...h }, body: JSON.stringify({ password: 'test-password' }) })).headers.get('set-cookie')!;
+  try {
+    assert.match(await lg(a, { 'x-forwarded-proto': 'https' }), /; Secure/);
+    assert.doesNotMatch(await lg(a, {}), /; Secure/);
+    assert.doesNotMatch(await lg(b, { 'x-forwarded-proto': 'https' }), /; Secure/);
+  } finally { await a.close(); await b.close(); fs.rmSync(d, { recursive: true, force: true }); fs.rmSync(d + 'b', { recursive: true, force: true }); }
+});

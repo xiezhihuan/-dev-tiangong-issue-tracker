@@ -17,8 +17,9 @@ interface Cursor { id: number; at: number; closed: boolean }
 export const HELP = `📒 反馈收集助手
 直接把文字、截图、语音、文件发给我就会记录。连续发送的内容自动并成一条。
 
-【记录】
-新建 — 另起一条
+【提交问题】
+提交：导出失败 — 直接另起一条
+新建 — 接下来发的另起一条
 完成 — 结束当前这条
 撤销 — 撤回上一条素材
 拆分 — 把上一条素材拆成新反馈
@@ -38,18 +39,22 @@ export const HELP = `📒 反馈收集助手
 /并入 7 — 与 #7 是同一条，合并过去`;
 
 const FIELD_CMDS: Record<string, string> = { 客户: 'reporter', 反馈人: 'reporter', 产品: 'product', 版本: 'version', 分类: 'category', 优先级: 'severity', 标签: 'tags', 标题: 'title', 状态: 'status', 来源: 'source' };
-const ALIASES: Record<string, string> = { help: '帮助', '?': '帮助', '？': '帮助', 归并: '同类', 合并: '并入', 搜索: '查', 查询: '查', 查找: '查', 新: '新建', new: '新建', done: '完成', 结束: '完成', 撤回: '撤销', undo: '撤销' };
+const ALIASES: Record<string, string> = { help: '帮助', '?': '帮助', '？': '帮助', 归并: '同类', 合并: '并入', 搜索: '查', 查询: '查', 查找: '查', 新: '新建', new: '新建', 提交: '新建', 提交问题: '新建', 提交新问题: '新建', 新问题: '新建', done: '完成', 结束: '完成', 撤回: '撤销', undo: '撤销' };
 const COMMANDS = ['帮助', '新建', '完成', '撤销', '拆分', '补充', '备注', '解决', '查', '详情', '相似', '待处理', '统计', '同类', '并入', '绑定', ...Object.keys(FIELD_CMDS), ...Object.keys(ALIASES)];
 const SLASH = new RegExp(`^[/／]\\s*(${COMMANDS.map((c) => c.replace(/[?]/g, '\\$&')).sort((a, b) => b.length - a.length).join('|')})(?=$|[\\s#\\d:：])[\\s:：]*([\\s\\S]*)$`, 'i');
 const READ_ONLY = new Set(['帮助', '绑定', '撤销', '拆分', '查', '详情', '相似', '待处理', '统计', '同类', '并入']);
 /** 不带斜杠也认的只有整句完全匹配的几种，避免把反馈正文误当指令。 */
-const BARE = /^(新建|完成|撤销|拆分|帮助|待处理|统计)$/;
+const BARE = /^(新建|提交问题|提交新问题|新问题|完成|撤销|拆分|帮助|待处理|统计)$/;
+/** 「提交：导出失败」—— 不论合并窗口，直接另起一条。必须带冒号，避免误伤正文。 */
+const SUBMIT = /^(?:提交|提交问题|提交新问题|新问题|新建)\s*[:：]\s*(\S[\s\S]*)$/;
 const BARE_ID = /^(同类|归并|并入|详情|相似)\s*#?(\d{1,9})$/;
 
 export function parseCommand(text: string): { name: string; arg: string } | null {
   const t = text.trim();
   const b = BARE.exec(t);
-  if (b) return { name: b[1]!, arg: '' };
+  if (b) return { name: ALIASES[b[1]!] ?? b[1]!, arg: '' };
+  const n = SUBMIT.exec(t);
+  if (n) return { name: '新建', arg: n[1]!.trim() };
   const i = BARE_ID.exec(t);
   if (i) return { name: ALIASES[i[1]!] ?? i[1]!, arg: i[2]! };
   const s = SLASH.exec(t);

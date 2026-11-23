@@ -40,6 +40,7 @@ const act = (fn) => async (e) => {
 const pad = (n) => String(n).padStart(2, '0');
 const time = (ms) => { if (!ms) return ''; const d = new Date(ms); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 const size = (n) => (n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : n > 1024 ? Math.round(n / 1024) + ' KB' : n + ' B');
+const copy = async (t) => { try { await navigator.clipboard.writeText(t); } catch { const a = h('textarea', { style: 'position:fixed;opacity:0' }); a.value = t; document.body.append(a); a.select(); document.execCommand('copy'); a.remove(); } toast('已复制'); };
 const qs = (o) => new URLSearchParams(Object.entries(o).filter(([, v]) => v)).toString();
 const statusEl = (s) => h('span', { class: `st ${s}` }, meta.status[s]);
 const who = (a) => meta.users.find((u) => u.openid === a)?.nickname || (meta.users.some((u) => u.openid === a) ? 'QQ 用户' : /^[0-9A-F]{16,}$/i.test(a) ? 'QQ 用户' : a);
@@ -47,7 +48,7 @@ const opts = (pairs, cur, first) => [first !== undefined && h('option', { value:
 const loadMeta = async () => { meta = await api('/meta'); };
 
 // ───────── 路由 ─────────
-const NAV = [['feedbacks', '反馈'], ['topics', '同类问题'], ['stats', '统计'], ['settings', '设置']];
+const NAV = [['feedbacks', '提交记录'], ['topics', '同类问题'], ['stats', '统计'], ['settings', '设置']];
 const route = () => { const [p, q] = (location.hash.slice(1) || '/feedbacks').split('?'); const [, page, id] = p.split('/'); return { page: page || 'feedbacks', id, query: Object.fromEntries(new URLSearchParams(q)) }; };
 let seq = 0;
 async function render() {
@@ -59,10 +60,12 @@ async function render() {
     if (my !== seq) return;
     $app.replaceChildren(
       h('header', {}, h('b', {}, '用户反馈库'), h('nav', {}, NAV.map(([k, t]) => h('a', { href: `#/${k}`, class: r.page === k ? 'on' : '' }, t))),
-        h('button', { class: 'primary', onclick: () => addDialog() }, '新增反馈'), h('button', { class: 'link', onclick: act(async () => { await api('/logout', { method: 'POST' }); meta = null; renderLogin(); }) }, '退出')),
+        h('button', { class: 'primary', onclick: () => addDialog() }, '新增反馈'), window.tgDesktop ? h('button', { onclick: () => window.tgDesktop.openSettings() }, '控制台') : h('button', { class: 'link', onclick: act(async () => { await api('/logout', { method: 'POST' }); meta = null; renderLogin(); }) }, '退出')),
       h('main', {}, el));
   } catch (e) { if (my === seq && meta) $app.replaceChildren(h('main', {}, h('div', { class: 'empty' }, e.message, ' ', h('a', { href: '#/feedbacks' }, '返回列表')))); }
 }
+// 手机切回页面时刷新记录（主屏幕模式没有刷新按钮）；正在输入时不打断
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && meta && route().page === 'feedbacks' && !route().id && !document.querySelector('dialog') && !/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName ?? '')) render(); });
 window.addEventListener('hashchange', () => { scrollTo(0, 0); render(); });
 
 function renderLogin() {
@@ -78,29 +81,50 @@ function filterBar(q, page, extra = []) {
   const go = (patch) => { location.hash = `#/${page}?` + qs({ ...q, ...patch, page: '' }); };
   const sel = (k, pairs, label) => h('select', { 'aria-label': label, onchange: (e) => go({ [k]: e.target.value }) }, opts(pairs, q[k] ?? '', label));
   const names = (list) => { const v = list.map((c) => c.name); if (v.length && q.category && !v.includes(q.category) && list === meta.categories) v.push(q.category); return v.map((n) => [n, n]); };
-  return h('div', { class: 'row filters' },
-    h('form', { class: 'row grow', onsubmit: (e) => { e.preventDefault(); go({ q: e.target.q.value }); } }, h('input', { type: 'search', name: 'q', value: q.q ?? '', placeholder: '搜索正文、截图文字、客户、编号…', 'aria-label': '搜索' })),
+  const on = ['status', 'category', 'product', 'severity', 'channel', 'from', 'to'].filter((k) => q[k]).length;
+  const more = h('button', { class: 'more', 'aria-expanded': 'false', onclick: () => { const o = box.classList.toggle('open'); more.setAttribute('aria-expanded', String(o)); } }, on ? `筛选 ${on}` : '筛选');
+  const box = h('div', { class: 'filters' },
+    h('div', { class: 'row' }, h('form', { class: 'row grow', onsubmit: (e) => { e.preventDefault(); go({ q: e.target.q.value }); } }, h('input', { type: 'search', name: 'q', value: q.q ?? '', placeholder: '搜索正文、截图文字、客户、编号…', 'aria-label': '搜索' })), more),
+    h('div', { class: 'row fields' },
     sel('status', [['todo', '未完结'], ...Object.entries(meta.status)], '全部状态'), sel('category', names(meta.categories), '全部分类'),
-    meta.products.length > 0 && sel('product', names(meta.products), '全部产品'), sel('severity', Object.entries(meta.severity), '全部优先级'),
-    h('input', { type: 'date', value: q.from ?? '', 'aria-label': '开始日期', onchange: (e) => go({ from: e.target.value }) }), h('input', { type: 'date', value: q.to ?? '', 'aria-label': '结束日期', onchange: (e) => go({ to: e.target.value }) }),
-    Object.keys(q).some((k) => k !== 'page' && q[k]) && h('button', { class: 'link', onclick: () => { location.hash = `#/${page}`; } }, '清除'), extra);
+    meta.products.length > 0 && sel('product', names(meta.products), '全部产品'), sel('severity', Object.entries(meta.severity), '全部优先级'), sel('channel', [['qq', 'QQ 提交'], ['web', '网页提交']], '全部来路'),
+    h('label', { class: 'dt small muted' }, '从', h('input', { type: 'date', value: q.from ?? '', 'aria-label': '开始日期', onchange: (e) => go({ from: e.target.value }) })), h('label', { class: 'dt small muted' }, '到', h('input', { type: 'date', value: q.to ?? '', 'aria-label': '结束日期', onchange: (e) => go({ to: e.target.value }) })),
+    Object.keys(q).some((k) => k !== 'page' && q[k]) && h('button', { class: 'link', onclick: () => { location.hash = `#/${page}`; } }, '清除'), extra));
+  return box;
+}
+const via = (f) => (f.channel === 'qq' ? `QQ · ${who(f.author)}`.replace('QQ · QQ 用户', 'QQ') : '网页');
+/** 手机端：按提交日期分组的卡片。 */
+function cards(items) {
+  const today = time(Date.now()).slice(0, 10), yest = time(Date.now() - 86400000).slice(0, 10), out = [];
+  let last = '';
+  for (const f of items) {
+    const d = time(f.created_at).slice(0, 10);
+    if (d !== last) { out.push(h('h2', { class: 'day' }, d === today ? '今天' : d === yest ? '昨天' : d)); last = d; }
+    const ex = f.excerpt.replace(/\s+/g, ' ').trim();
+    out.push(h('a', { class: 'rec', href: `#/feedbacks/${f.id}` },
+      h('div', { class: 'grow' }, h('div', { class: 'row small muted' }, h('span', {}, `#${f.id}`), h('span', { class: 'grow' }, time(f.created_at).slice(11), ' · ', via(f)), statusEl(f.status)),
+        h('div', { class: 'rt' }, f.title), ex && ex !== f.title && h('div', { class: 'rx small' }, ex),
+        h('div', { class: 'small muted' }, [meta.severity[f.severity] !== meta.severity.normal && h('span', { class: `sev-${f.severity}` }, meta.severity[f.severity], ' · '), [f.category, f.product, f.version, f.reporter, f.attachment_count && `${f.attachment_count} 附件`].filter(Boolean).join(' · ')])),
+      f.thumb && h('img', { src: `/api/attachments/${f.thumb}`, alt: '', loading: 'lazy' })));
+  }
+  return h('div', { class: 'cards narrow' }, out);
 }
 async function listPage(q) {
   const data = await api('/feedbacks?' + qs(q)), page = Number(q.page) || 1, pages = Math.max(1, Math.ceil(data.total / 30));
   const exp = (f) => '/api/export/' + f + '?' + qs({ ...q, page: '' });
   return h('div', {},
     filterBar(q, 'feedbacks'),
-    h('div', { class: 'row small muted', style: 'margin-bottom:8px' }, h('span', { class: 'grow' }, `共 ${data.total} 条`,
+    h('div', { class: 'row small muted', style: 'margin-bottom:8px' }, h('span', { class: 'grow' }, h('span', { class: 'nowrap' }, `共 ${data.total} 条`),
       q.topic === 'none' ? '（未归并）' : '', q.tag ? `（标签：${q.tag}）` : '', q.reporter ? `（反馈人：${q.reporter}）` : '', q.deleted ? '（回收站）' : ''),
-      h('a', { href: '#/feedbacks?topic=none' }, '未归并'), h('a', { href: '#/feedbacks?deleted=1' }, '回收站'), h('span', {}, '导出当前结果：'), h('a', { href: exp('csv') }, 'Excel(CSV)'), h('a', { href: exp('md') }, 'Markdown'), h('a', { href: exp('json') }, 'JSON')),
+      h('a', { href: '#/feedbacks?topic=none' }, '未归并'), h('a', { href: '#/feedbacks?deleted=1' }, '回收站'), h('span', { class: 'wide' }, '导出当前结果：'), h('a', { class: 'wide', href: exp('csv') }, 'Excel(CSV)'), h('a', { class: 'wide', href: exp('md') }, 'Markdown'), h('a', { class: 'wide', href: exp('json') }, 'JSON')),
     data.items.length === 0 ? h('div', { class: 'card empty' }, Object.keys(q).length ? '没有符合条件的反馈' : '还没有反馈。绑定 QQ 后把内容发给机器人，或点右上角「新增反馈」。')
-      : h('div', { class: 'tablewrap' }, h('table', {}, h('thead', {}, h('tr', {}, ['编号', '标题', '状态', '优先级', '分类', '反馈人', '素材', '时间'].map((t) => h('th', {}, t)))),
+      : [cards(data.items), h('div', { class: 'tablewrap wide' }, h('table', {}, h('thead', {}, h('tr', {}, ['编号', '标题', '状态', '优先级', '分类', '反馈人', '提交', '素材', '时间'].map((t) => h('th', {}, t)))),
         h('tbody', {}, data.items.map((f) => h('tr', { class: 'click', onclick: (e) => { if (!e.target.closest('a')) location.hash = `#/feedbacks/${f.id}`; } },
           h('td', { class: 'nowrap muted' }, h('a', { href: `#/feedbacks/${f.id}` }, `#${f.id}`)),
           h('td', {}, h('div', { class: 't' }, f.title), f.topic_title && h('a', { class: 'tag', href: `#/topics/${f.topic_id}` }, '同类：' + f.topic_title), f.tags.map((t) => h('a', { class: 'tag', href: '#/feedbacks?' + qs({ tag: t }) }, t))),
           h('td', {}, statusEl(f.status)), h('td', { class: `nowrap sev-${f.severity}` }, meta.severity[f.severity]),
           h('td', { class: 'nowrap' }, f.category, (f.product || f.version) && h('div', { class: 'small muted' }, [f.product, f.version].filter(Boolean).join(' '))),
-          h('td', { class: 'nowrap' }, f.reporter), h('td', { class: 'nowrap muted' }, `${f.message_count} 条`, f.attachment_count ? ` / ${f.attachment_count} 附件` : ''), h('td', { class: 'nowrap muted' }, time(f.created_at))))))),
+          h('td', { class: 'nowrap' }, f.reporter), h('td', { class: 'nowrap muted' }, via(f)), h('td', { class: 'nowrap muted' }, `${f.message_count} 条`, f.attachment_count ? ` / ${f.attachment_count} 附件` : ''), h('td', { class: 'nowrap muted' }, time(f.created_at))))))) ],
     pages > 1 && h('div', { class: 'pager' }, h('button', { disabled: page <= 1, onclick: () => { location.hash = '#/feedbacks?' + qs({ ...q, page: page - 1 }); } }, '上一页'), `${page} / ${pages}`, h('button', { disabled: page >= pages, onclick: () => { location.hash = '#/feedbacks?' + qs({ ...q, page: page + 1 }); } }, '下一页')));
 }
 
@@ -149,6 +173,7 @@ async function feedbackPage(id) {
       ? h('button', { onclick: act(async () => { await api(`/feedbacks/${id}/restore`, { method: 'POST' }); toast('已恢复'); render(); }) }, '恢复')
       : h('button', { class: 'danger', onclick: act(async () => { if (!confirm('移入回收站？')) return; await api(`/feedbacks/${id}`, { method: 'DELETE' }); toast('已移入回收站'); location.hash = '#/feedbacks'; }) }, '删除')),
     h('h1', { style: 'margin-top:8px;overflow-wrap:anywhere' }, `#${f.id} ${f.title}`, f.deleted_at && h('span', { class: 'sev-urgent' }, '（已删除）')),
+    h('div', { class: 'row small muted', style: 'margin-bottom:12px' }, statusEl(f.status), h('span', { class: `sev-${f.severity}` }, meta.severity[f.severity]), [f.category, f.product, f.version, f.reporter, time(f.created_at)].filter(Boolean).map((x) => h('span', {}, x))),
     h('div', { class: 'two' },
       h('div', {},
         h('div', { class: 'card' }, h('h2', {}, '反馈内容'),
@@ -187,8 +212,8 @@ async function topicsPage(q) {
   return h('div', {}, h('div', { class: 'row filters' }, h('form', { class: 'row grow', onsubmit: (e) => { e.preventDefault(); location.hash = '#/topics?' + qs({ q: e.target.q.value }); } }, h('input', { type: 'search', name: 'q', value: q.q ?? '', placeholder: '搜索问题、原因、方案…', 'aria-label': '搜索' })),
     h('button', { onclick: act(async () => { const t = prompt('问题标题'); if (!t) return; const r = await api('/topics', { method: 'POST', body: { title: t } }); await loadMeta(); location.hash = `#/topics/${r.id}`; }) }, '新建问题')),
     list.length === 0 ? h('div', { class: 'card empty' }, '还没有同类问题。在反馈详情里点「归为同类」，或在 QQ 里回复「同类 编号」。')
-      : h('div', { class: 'tablewrap' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, '问题'), h('th', { class: 'num' }, '反馈数'), h('th', { class: 'num' }, '未完结'), h('th', { class: 'num' }, '客户数'), h('th', {}, '首次'), h('th', {}, '最近'), h('th', {}, '状态'))),
-        h('tbody', {}, list.map((t) => h('tr', { class: 'click', onclick: () => { location.hash = `#/topics/${t.id}`; } }, h('td', {}, h('a', { class: 't', href: `#/topics/${t.id}` }, t.title), t.solution && h('div', { class: 'small muted' }, '方案：' + t.solution.slice(0, 80))), h('td', { class: 'num' }, t.count), h('td', { class: 'num' }, t.todo ?? 0), h('td', { class: 'num' }, t.reporters), h('td', { class: 'nowrap muted' }, time(t.first_at).slice(0, 10)), h('td', { class: 'nowrap muted' }, time(t.last_at).slice(0, 10)), h('td', {}, statusEl(t.status))))))));
+      : h('div', { class: 'tablewrap' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, '问题'), h('th', { class: 'num' }, '反馈数'), h('th', { class: 'num' }, '未完结'), h('th', { class: 'num wide' }, '客户数'), h('th', { class: 'wide' }, '首次'), h('th', { class: 'wide' }, '最近'), h('th', {}, '状态'))),
+        h('tbody', {}, list.map((t) => h('tr', { class: 'click', onclick: () => { location.hash = `#/topics/${t.id}`; } }, h('td', {}, h('a', { class: 't', href: `#/topics/${t.id}` }, t.title), t.solution && h('div', { class: 'small muted' }, '方案：' + t.solution.slice(0, 80))), h('td', { class: 'num' }, t.count), h('td', { class: 'num' }, t.todo ?? 0), h('td', { class: 'num wide' }, t.reporters), h('td', { class: 'nowrap muted wide' }, time(t.first_at).slice(0, 10)), h('td', { class: 'nowrap muted wide' }, time(t.last_at).slice(0, 10)), h('td', {}, statusEl(t.status))))))));
 }
 async function topicPage(id) {
   const t = await api(`/topics/${id}`);
@@ -221,6 +246,29 @@ async function statsPage(q) {
 
 // ───────── 设置 ─────────
 const BOT = { online: '在线', connecting: '连接中', offline: '离线，自动重连中', blocked: '无法连接', disabled: '未启用', stopped: '已停止' };
+function phoneCard(s) {
+  return h('div', { class: 'card' }, h('h2', {}, '手机查看'),
+    s.access.length === 0 ? h('div', { class: 'muted' }, window.tgDesktop ? '现在只有本机能打开。到「控制台 → 设置 → 访问」打开局域网访问。' : '现在只有本机能打开。在 .env 里设 HOST=0.0.0.0（同一 Wi-Fi 可用）或填写 PUBLIC_URL（外网可用），然后重启。')
+      : [h('div', { class: 'small muted', style: 'margin-bottom:8px' }, s.publicUrl ? '手机扫码打开，用登录密码进入。可「添加到主屏幕」当 App 用。' : '手机连同一 Wi-Fi 后扫码打开，用登录密码进入。可「添加到主屏幕」当 App 用。在外面用需要先配置外网地址。'),
+        h('div', { class: 'row', style: 'align-items:flex-start;gap:20px' }, s.access.map((a) => h('div', {}, h('img', { class: 'qr', src: a.qr, alt: `${a.url} 的二维码` }), h('div', { class: 'small' }, h('b', {}, a.kind === 'public' ? '外网 ' : '局域网 '), a.url))))]);
+}
+function mcpCard(s) {
+  const url = `${location.origin}/mcp`, out = h('div', {});
+  const name = h('input', { placeholder: '名称，如 我的 Claude', 'aria-label': '令牌名称' });
+  const block = (label, text) => h('div', { style: 'margin-top:10px' }, h('div', { class: 'row small' }, h('b', { class: 'grow' }, label), h('button', { type: 'button', class: 'link', onclick: () => copy(text) }, '复制')), h('pre', { class: 'cmd' }, text));
+  const create = act(async () => {
+    const { token } = await api('/mcp-tokens', { method: 'POST', body: { name: name.value || 'AI 助手' } });
+    await render();
+    document.getElementById('mcp-out').replaceChildren(h('div', { class: 'sev-high', style: 'margin-top:10px' }, '令牌只显示这一次，请立即复制：'),
+      block('Claude Code（终端执行）', `claude mcp add --transport http --scope user tiangong-feedback ${url} --header "Authorization: Bearer ${token}"`),
+      block('Codex（追加到 ~/.codex/config.toml）', `[mcp_servers.tiangong-feedback]\nurl = "${url}"\nhttp_headers = { "Authorization" = "Bearer ${token}" }`),
+      block('其他支持 MCP 的工具（JSON）', JSON.stringify({ mcpServers: { 'tiangong-feedback': { type: 'http', url, headers: { Authorization: `Bearer ${token}` } } } }, null, 2)));
+  });
+  out.id = 'mcp-out';
+  return h('div', { class: 'card' }, h('h2', {}, 'AI 助手（MCP）'), h('div', { class: 'small muted' }, `让 Claude Code、Codex 等查询问题库，只读。地址 ${url}`),
+    s.tokens.map((t) => h('div', { class: 'row sim' }, h('span', { class: 'grow' }, t.name, h('span', { class: 'muted small' }, ` 创建于 ${time(t.created_at)} · ${t.last_used_at ? `最近使用 ${time(t.last_used_at)}` : '未使用过'}`)), h('button', { class: 'link danger', onclick: act(async () => { if (!confirm(`撤销「${t.name}」？使用它的助手将立即无法访问。`)) return; await api(`/mcp-tokens/${t.id}`, { method: 'DELETE' }); render(); }) }, '撤销'))),
+    h('div', { class: 'row', style: 'margin-top:10px' }, name, h('button', { onclick: create }, '生成访问令牌')), out);
+}
 async function settingsPage() {
   const s = await api('/system');
   const codeBox = h('div', {});
@@ -235,6 +283,7 @@ async function settingsPage() {
     h('div', { class: 'card' }, h('h2', {}, '运行状态'), h('div', {}, '机器人：', h('b', {}, BOT[s.bot.state] ?? s.bot.state), s.bot.reason && `（${s.bot.reason}）`, s.bot.lastEventAt ? h('span', { class: 'muted' }, ` 最近事件 ${time(s.bot.lastEventAt)}`) : null), h('div', {}, '截图文字识别：', { ready: '正常', unavailable: '不可用', disabled: '已关闭' }[s.ocr]), h('div', {}, `附件：待下载 ${s.queue.downloading}，待识别 ${s.queue.recognizing}，失败 ${s.queue.failed}`), h('div', { class: 'small muted' }, `连续消息合并窗口 ${s.mergeWindowMinutes} 分钟 · 数据目录 ${s.dataDir} · 启动于 ${time(s.startedAt)}`)),
     h('div', { class: 'card' }, h('h2', {}, 'QQ 账号'), h('div', { class: 'small muted' }, '只有绑定过的 QQ 才能向机器人记录和查询反馈。'), s.users.map((u) => h('div', { class: 'row sim' }, h('span', { class: 'grow' }, u.nickname || 'QQ 用户', h('span', { class: 'muted small' }, ` ${u.openid.slice(0, 8)}… 绑定于 ${time(u.bound_at)}`)), h('button', { class: 'link danger', onclick: act(async () => { if (!confirm('解除绑定？')) return; await api(`/qq-users/${encodeURIComponent(u.openid)}`, { method: 'DELETE' }); await loadMeta(); render(); }) }, '解绑'))), codeBox,
       h('button', { style: 'margin-top:10px', onclick: act(async () => { const r = await api('/bind-code', { method: 'POST' }); codeBox.replaceChildren(h('div', { class: 'code' }, `绑定 ${r.code}`), h('div', { class: 'small muted' }, `在 QQ 里把上面这行发给机器人，${time(r.exp).slice(11)} 前有效，仅可用一次`)); }) }, '生成绑定码')),
+    phoneCard(s), mcpCard(s),
     tax('product', '产品', '名称和关键词出现在反馈里时自动标注产品。'), tax('category', '分类', '按关键词自动归类；人工改过分类的反馈不受影响。'));
 }
 
